@@ -129,7 +129,7 @@ header h1{font-size:1.15rem;font-weight:600}
 <body>
 
 <header>
-  <h1>CAM-O</h1>
+  <h1>CAM-O <span id="syncBadge" style="display:none;font-size:.65rem;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle"></span></h1>
   <button id="installBtn" class="btn btn-sm" onclick="installApp()" style="display:none;margin:8px auto 0;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4)">Uygulamayi Yukle</button>
 </header>
 
@@ -138,6 +138,7 @@ header h1{font-size:1.15rem;font-weight:600}
     <div class="tab active" onclick="switchTab('calc')">Hesaplama</div>
     <div class="tab" onclick="switchTab('history')">Gecmis</div>
     <div class="tab" onclick="switchTab('prices')">Fiyat Listesi</div>
+    <div class="tab" onclick="switchTab('settings')">Ayarlar</div>
   </div>
 
   <!-- CALCULATOR TAB -->
@@ -215,6 +216,25 @@ header h1{font-size:1.15rem;font-weight:600}
         </div>
         <button class="btn btn-primary btn-block btn-sm mt8" onclick="addNewProduct()">Urun Ekle</button>
       </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div id="tab-settings" class="tab-content">
+    <div class="card">
+      <div class="card-title">GitHub Senkronizasyonu</div>
+      <div id="settingsContent"></div>
+    </div>
+    <div class="card" style="background:#fff8e1;border:1px solid #ffe082">
+      <div class="card-title" style="color:#e65100">Nasil Kurulur?</div>
+      <ol style="font-size:.82rem;line-height:1.8;padding-left:18px;color:var(--text2)">
+        <li>github.com &rarr; Settings &rarr; Developer settings</li>
+        <li>Personal access tokens &rarr; Tokens (classic)</li>
+        <li>Generate new token &rarr; sadece <b>gist</b> yetkisi sec</li>
+        <li>Token'i kopyala, buraya yapistir</li>
+        <li>Gist ID bos birakilabilir (ilk kayitta otomatik olusur)</li>
+        <li>Diger cihazlarda ayni token + olusturulan Gist ID'yi gir</li>
+      </ol>
     </div>
   </div>
 </div>
@@ -341,7 +361,34 @@ const DEFAULT_CATALOG = [
 
 const LABOR_RATE = 0.30;
 const LABOR_MIN = 4000;
-const CLIENT_ID = Math.random().toString(36).slice(2);
+const GIST_FILENAME = 'cam-o-data.json';
+
+function getSyncConfig() {
+  return {
+    token: localStorage.getItem('camGhToken') || '',
+    gistId: localStorage.getItem('camGistId') || ''
+  };
+}
+
+function updateSyncBadge() {
+  const el = document.getElementById('syncBadge');
+  if (!el) return;
+  const { token } = getSyncConfig();
+  const pending = localStorage.getItem('camPending') === 'true';
+  const lastSync = localStorage.getItem('camLastSync');
+  if (!token) { el.style.display = 'none'; return; }
+  el.style.display = 'inline-block';
+  if (pending) {
+    el.textContent = '⏳ Bekliyor';
+    el.style.background = 'rgba(255,152,0,.35)';
+    el.style.color = '#fff';
+  } else if (lastSync) {
+    const d = new Date(lastSync);
+    el.textContent = '✓ ' + d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+    el.style.background = 'rgba(255,255,255,.2)';
+    el.style.color = '#fff';
+  }
+}
 
 // ============ CATALOG MANAGEMENT ============
 let catalog = JSON.parse(JSON.stringify(DEFAULT_CATALOG));
@@ -351,19 +398,12 @@ function getCatalog() {
   return catalog;
 }
 
-async function saveCatalog(cat) {
+function saveCatalog(cat) {
   catalog = cat;
   localStorage.setItem('camCatalog_cache', JSON.stringify(cat));
-  try {
-    await fetch('/api/catalog', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Client-ID': CLIENT_ID},
-      body: JSON.stringify(cat)
-    });
-  } catch(e) {
-    localStorage.setItem('camPending', 'true');
-    showToast('Sunucu kapali - Mac acilinca senkronize edilecek', 'error');
-  }
+  // Gist sync debounceli tetiklenir (art arda fiyat degisikliklerinde tek push)
+  clearTimeout(saveCatalog._t);
+  saveCatalog._t = setTimeout(() => syncToGist(true), 1500);
 }
 
 function getProduct(id) {
@@ -389,80 +429,34 @@ let openSubgroup = null;
 
 // ============ INIT ============
 async function initApp() {
-  try {
-    const [catRes, projRes] = await Promise.all([
-      fetch('/api/catalog'),
-      fetch('/api/projects')
-    ]);
-    const catData = await catRes.json();
-    if (catData && catData.length > 0) {
-      catalog = catData;
-      localStorage.setItem('camCatalog_cache', JSON.stringify(catData));
-    }
-    const projData = await projRes.json();
-    if (Array.isArray(projData)) {
-      projects = projData;
-      localStorage.setItem('camProjects_cache', JSON.stringify(projData));
-    }
-  } catch(e) {
-    // Sunucu kapali - son kaydedilen veriyi yukle
-    const cachedCatalog = localStorage.getItem('camCatalog_cache');
-    const cachedProjects = localStorage.getItem('camProjects_cache');
-    if (cachedCatalog) {
-      catalog = JSON.parse(cachedCatalog);
-      showToast('Cevrimdisi mod - son senkronize veri yuklendi', 'info');
-    } else {
-      showToast('Sunucu kapali - varsayilan veriler yuklendi', 'error');
-    }
-    if (cachedProjects) projects = JSON.parse(cachedProjects);
-  }
+  // Once cache'den yukle (ani gosterim icin)
+  const cachedCatalog = localStorage.getItem('camCatalog_cache');
+  const cachedProjects = localStorage.getItem('camProjects_cache');
+  if (cachedCatalog) catalog = JSON.parse(cachedCatalog);
+  if (cachedProjects) projects = JSON.parse(cachedProjects);
+
   document.getElementById('projectDate').value = new Date().toISOString().split('T')[0];
   addDefaultItems();
   renderProductGroups();
   renderHistory();
   calculate();
   updateMatCount();
-  setupSSE();
-}
+  updateSyncBadge();
 
-function setupSSE() {
-  const es = new EventSource('/api/events?clientId=' + CLIENT_ID);
-
-  es.onopen = async () => {
-    if (!localStorage.getItem('camPending')) return;
-    try {
-      const cachedCatalog = localStorage.getItem('camCatalog_cache');
-      const cachedProjects = localStorage.getItem('camProjects_cache');
-      const reqs = [];
-      if (cachedCatalog) reqs.push(fetch('/api/catalog', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-Client-ID': CLIENT_ID},
-        body: cachedCatalog
-      }));
-      if (cachedProjects) reqs.push(fetch('/api/projects', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-Client-ID': CLIENT_ID},
-        body: cachedProjects
-      }));
-      await Promise.all(reqs);
-      localStorage.removeItem('camPending');
-      showToast('Bekleyen degisiklikler sunucuya gonderildi!', 'success');
-    } catch(e) { /* sunucu hala kapali, sonraki baglanmada tekrar denenecek */ }
-  };
-
-  es.addEventListener('catalog', e => {
-    catalog = JSON.parse(e.data);
-    localStorage.setItem('camCatalog_cache', e.data);
-    renderProductGroups();
-    if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
-    showToast('Fiyat listesi guncellendi', 'info');
-  });
-  es.addEventListener('projects', e => {
-    projects = JSON.parse(e.data);
-    localStorage.setItem('camProjects_cache', e.data);
-    if (document.getElementById('tab-history').classList.contains('active')) renderHistory();
-    showToast('Projeler guncellendi', 'info');
-  });
+  // GitHub Gist varsa: en guncel veriyi cek
+  const { token, gistId } = getSyncConfig();
+  if (token && gistId) {
+    const ok = await syncFromGist();
+    if (ok) {
+      renderProductGroups();
+      renderHistory();
+      if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+    }
+    // Bekleyen degisiklik varsa gonder
+    if (localStorage.getItem('camPending') === 'true') {
+      await syncPendingChanges();
+    }
+  }
 }
 
 initApp();
@@ -765,19 +759,16 @@ async function saveProject() {
     projects.unshift(data);
   }
   localStorage.setItem('camProjects_cache', JSON.stringify(projects));
-  try {
-    await fetch('/api/projects', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Client-ID': CLIENT_ID},
-      body: JSON.stringify(projects)
-    });
-    showToast('Kaydedildi!', 'success');
-  } catch(e) {
-    localStorage.setItem('camPending', 'true');
-    showToast('Sunucu kapali - Mac acilinca senkronize edilecek', 'error');
-  }
   resetForm();
   renderHistory();
+  const { token } = getSyncConfig();
+  if (token) {
+    const ok = await syncToGist(true);
+    if (ok) showToast('Kaydedildi ve senkronize edildi!', 'success');
+    else showToast('Yerel kaydedildi. Baglanti gelince senkronize edilecek.', 'info');
+  } else {
+    showToast('Kaydedildi!', 'success');
+  }
 }
 
 function resetForm() {
@@ -848,17 +839,8 @@ async function deleteFromHistory(id) {
   if (!confirm('Bu projeyi silmek istediginize emin misiniz?')) return;
   projects = projects.filter(p => p.id !== id);
   localStorage.setItem('camProjects_cache', JSON.stringify(projects));
-  try {
-    await fetch('/api/projects', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Client-ID': CLIENT_ID},
-      body: JSON.stringify(projects)
-    });
-  } catch(e) {
-    localStorage.setItem('camPending', 'true');
-    showToast('Sunucu kapali - Mac acilinca senkronize edilecek', 'error');
-  }
   renderHistory();
+  syncToGist(true);
 }
 
 // ============ HISTORY ============
@@ -922,17 +904,9 @@ async function deleteProject(id) {
   if (!confirm('Silmek istediginize emin misiniz?')) return;
   projects = projects.filter(x => x.id !== id);
   localStorage.setItem('camProjects_cache', JSON.stringify(projects));
-  try {
-    await fetch('/api/projects', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Client-ID': CLIENT_ID},
-      body: JSON.stringify(projects)
-    });
-  } catch(e) {
-    localStorage.setItem('camPending', 'true');
-    showToast('Sunucu kapali - Mac acilinca senkronize edilecek', 'error');
-  }
-  closeModal(); renderHistory();
+  closeModal();
+  renderHistory();
+  syncToGist(true);
 }
 
 function loadToEditor() {
@@ -1039,13 +1013,151 @@ function addNewProduct() {
 // ============ TABS ============
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    const names = ['calc','history','prices'];
+    const names = ['calc','history','prices','settings'];
     t.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'history') renderHistory();
   if (name === 'prices') renderPriceEditor();
+  if (name === 'settings') renderSettingsTab();
+}
+
+// ============ GITHUB GIST SYNC ============
+async function syncToGist(silent = false) {
+  const { token, gistId } = getSyncConfig();
+  if (!token) {
+    if (!silent) showToast('GitHub token girilmedi! Ayarlar sekmesinden ekleyin.', 'error');
+    return false;
+  }
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    updatedBy: localStorage.getItem('camDeviceName') || 'Cihaz',
+    projects,
+    catalog
+  };
+  const body = { files: { [GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } } };
+  const headers = {
+    Authorization: `token ${token}`,
+    Accept: 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+  try {
+    let res;
+    if (gistId) {
+      res = await fetch(`https://api.github.com/gists/${gistId}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+    } else {
+      res = await fetch('https://api.github.com/gists', {
+        method: 'POST', headers,
+        body: JSON.stringify({ ...body, description: 'CAM-O Kamera Fiyat Verileri', public: false })
+      });
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!gistId) localStorage.setItem('camGistId', data.id);
+    localStorage.setItem('camPending', 'false');
+    localStorage.setItem('camLastSync', new Date().toISOString());
+    updateSyncBadge();
+    if (!silent) showToast('Senkronize edildi!', 'success');
+    return true;
+  } catch(e) {
+    localStorage.setItem('camPending', 'true');
+    updateSyncBadge();
+    if (!silent) showToast('Gist yazilamadi: ' + e.message, 'error');
+    return false;
+  }
+}
+
+async function syncFromGist() {
+  const { token, gistId } = getSyncConfig();
+  if (!token || !gistId) return false;
+  try {
+    const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const file = data.files[GIST_FILENAME];
+    if (!file) throw new Error('Dosya bulunamadi');
+    const content = JSON.parse(file.content);
+    if (content.projects) { projects = content.projects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
+    if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
+    localStorage.setItem('camLastSync', new Date().toISOString());
+    localStorage.setItem('camPending', 'false');
+    updateSyncBadge();
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+async function syncPendingChanges() {
+  if (localStorage.getItem('camPending') !== 'true') return;
+  showToast('Bekleyen degisiklikler gonderiliyor...', 'info');
+  const ok = await syncToGist(true);
+  if (ok) showToast('Bekleyen degisiklikler gonderildi!', 'success');
+}
+
+async function manualSync() {
+  showToast('Senkronize ediliyor...', 'info');
+  const pulled = await syncFromGist();
+  if (pulled) {
+    renderHistory();
+    renderProductGroups();
+    if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+  }
+  await syncToGist(true);
+  showToast('Senkronizasyon tamamlandi!', 'success');
+  renderSettingsTab();
+}
+
+async function saveGithubSettings() {
+  const token = document.getElementById('settingsToken').value.trim();
+  const gistId = document.getElementById('settingsGistId').value.trim();
+  const deviceName = document.getElementById('settingsDevice').value.trim() || 'Cihaz';
+  if (!token) { showToast('Token girin!', 'error'); return; }
+  localStorage.setItem('camGhToken', token);
+  localStorage.setItem('camGistId', gistId);
+  localStorage.setItem('camDeviceName', deviceName);
+  showToast('Ayarlar kaydedildi, baglaniyor...', 'info');
+  const ok = await syncToGist(true);
+  if (ok) { showToast('Baglanti kuruldu!', 'success'); renderSettingsTab(); updateSyncBadge(); }
+  else showToast('Hata - token veya Gist ID yanlis olabilir', 'error');
+}
+
+function renderSettingsTab() {
+  const { token, gistId } = getSyncConfig();
+  const deviceName = localStorage.getItem('camDeviceName') || '';
+  const lastSync = localStorage.getItem('camLastSync');
+  const pending = localStorage.getItem('camPending') === 'true';
+  const el = document.getElementById('settingsContent');
+  if (!el) return;
+  let statusHtml = '';
+  if (token) {
+    const syncTime = lastSync ? new Date(lastSync).toLocaleString('tr-TR') : 'Henuz sync yapilmadi';
+    statusHtml = `
+      <div style="background:${pending?'#fff3e0':'#e8f5e9'};border:2px solid ${pending?'#ff9800':'#4caf50'};border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="font-weight:600;color:${pending?'#e65100':'#2e7d32'};margin-bottom:4px">${pending ? '⚠ Bekleyen degisiklikler var' : '✓ GitHub bagli'}</div>
+        <div style="font-size:.8rem;color:var(--text2)">Son sync: ${syncTime}</div>
+        ${gistId ? `<div style="font-size:.72rem;color:var(--text2);margin-top:4px;word-break:break-all">Gist ID: ${gistId}</div>` : ''}
+      </div>`;
+  }
+  el.innerHTML = `
+    ${statusHtml}
+    <div class="form-group">
+      <label>GitHub Personal Access Token <span style="font-size:.75rem;color:var(--text2)">(gist yetkisi)</span></label>
+      <input type="password" id="settingsToken" value="${token}" placeholder="ghp_xxxxxxxxxxxx" style="font-family:monospace">
+    </div>
+    <div class="form-group">
+      <label>Gist ID <span style="font-size:.75rem;color:var(--text2)">(bos birakin: ilk kayitta otomatik olusur)</span></label>
+      <input type="text" id="settingsGistId" value="${gistId}" placeholder="">
+    </div>
+    <div class="form-group">
+      <label>Cihaz Adi <span style="font-size:.75rem;color:var(--text2)">(opsiyonel)</span></label>
+      <input type="text" id="settingsDevice" value="${deviceName}" placeholder="Ornek: Yasin'in Telefonu">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveGithubSettings()">Kaydet ve Baglan</button>
+    ${token ? `<button class="btn btn-outline btn-block mt8" onclick="manualSync()">Manuel Senkronize Et</button>` : ''}`;
 }
 
 // ============ UTILS ============
@@ -1063,6 +1175,9 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 
 document.getElementById('detailModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
 document.getElementById('matListModal').addEventListener('click', function(e) { if (e.target === this) closeMatList(); });
+
+// Baglanti geri gelince bekleyen degisiklikleri gonder
+window.addEventListener('online', syncPendingChanges);
 
 // ============ PWA ============
 if ('serviceWorker' in navigator) {
