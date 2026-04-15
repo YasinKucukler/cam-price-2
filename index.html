@@ -232,8 +232,7 @@ header h1{font-size:1.15rem;font-weight:600}
         <li>Personal access tokens &rarr; Tokens (classic)</li>
         <li>Generate new token &rarr; sadece <b>gist</b> yetkisi sec</li>
         <li>Token'i kopyala, buraya yapistir</li>
-        <li>Gist ID bos birakilabilir (ilk kayitta otomatik olusur)</li>
-        <li>Diger cihazlarda ayni token + olusturulan Gist ID'yi gir</li>
+        <li>Diger cihazlarda ayni token'i gir, otomatik eslesir</li>
       </ol>
     </div>
   </div>
@@ -1134,12 +1133,9 @@ function renderSettingsTab() {
   if (!el) return;
   let statusHtml = '';
   if (token) {
-    const syncTime = lastSync ? new Date(lastSync).toLocaleString('tr-TR') : 'Henuz sync yapilmadi';
     statusHtml = `
       <div style="background:${pending?'#fff3e0':'#e8f5e9'};border:2px solid ${pending?'#ff9800':'#4caf50'};border-radius:10px;padding:12px;margin-bottom:14px">
-        <div style="font-weight:600;color:${pending?'#e65100':'#2e7d32'};margin-bottom:4px">${pending ? '⚠ Bekleyen degisiklikler var' : '✓ GitHub bagli'}</div>
-        <div style="font-size:.8rem;color:var(--text2)">Son sync: ${syncTime}</div>
-        ${gistId ? `<div style="font-size:.72rem;color:var(--text2);margin-top:4px;word-break:break-all">Gist ID: ${gistId}</div>` : ''}
+        <div style="font-weight:600;color:${pending?'#e65100':'#2e7d32'}">${pending ? '⚠ Bekleyen degisiklikler var' : '✓ GitHub bagli'}</div>
       </div>`;
   }
   el.innerHTML = `
@@ -1148,10 +1144,11 @@ function renderSettingsTab() {
       <label>GitHub Personal Access Token <span style="font-size:.75rem;color:var(--text2)">(gist yetkisi)</span></label>
       <input type="password" id="settingsToken" value="${token}" placeholder="ghp_xxxxxxxxxxxx" style="font-family:monospace">
     </div>
+    ${gistId ? `<input type="hidden" id="settingsGistId" value="${gistId}">` : `
     <div class="form-group">
-      <label>Gist ID <span style="font-size:.75rem;color:var(--text2)">(bos birakin: ilk kayitta otomatik olusur)</span></label>
-      <input type="text" id="settingsGistId" value="${gistId}" placeholder="">
-    </div>
+      <label>Gist ID <span style="font-size:.75rem;color:var(--text2)">(bos birakin: otomatik olusturulur)</span></label>
+      <input type="text" id="settingsGistId" value="" placeholder="">
+    </div>`}
     <div class="form-group">
       <label>Cihaz Adi <span style="font-size:.75rem;color:var(--text2)">(opsiyonel)</span></label>
       <input type="text" id="settingsDevice" value="${deviceName}" placeholder="Ornek: Yasin'in Telefonu">
