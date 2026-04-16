@@ -128,6 +128,23 @@ header h1{font-size:1.15rem;font-weight:600}
 </head>
 <body>
 
+<!-- PIN EKRANI -->
+<div id="pinOverlay" style="display:none;position:fixed;inset:0;background:#f0f2f5;z-index:9999;align-items:center;justify-content:center;flex-direction:column">
+  <div style="background:#fff;border-radius:16px;padding:32px 24px;max-width:320px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.12);text-align:center">
+    <div style="font-size:2rem;margin-bottom:8px">🔒</div>
+    <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;color:#202124">CAM-O</h2>
+    <p style="font-size:.85rem;color:#5f6368;margin-bottom:20px">Devam etmek için PIN girin</p>
+    <input type="password" id="pinInput" maxlength="20" placeholder="PIN" inputmode="numeric"
+      style="width:100%;padding:12px;border:2px solid #dadce0;border-radius:10px;font-size:1.2rem;text-align:center;letter-spacing:4px;margin-bottom:8px;outline:none"
+      onkeydown="if(event.key==='Enter')checkPin()">
+    <div id="pinError" style="color:#d93025;font-size:.8rem;min-height:18px;margin-bottom:8px"></div>
+    <label style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:.85rem;color:#5f6368;margin-bottom:16px;cursor:pointer">
+      <input type="checkbox" id="pinRemember"> Beni hatırla
+    </label>
+    <button onclick="checkPin()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
+  </div>
+</div>
+
 <header>
   <h1>CAM-O <span id="syncBadge" style="display:none;font-size:.65rem;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle"></span></h1>
   <button id="installBtn" class="btn btn-sm" onclick="installApp()" style="display:none;margin:8px auto 0;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4)">Uygulamayi Yukle</button>
@@ -1189,6 +1206,34 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 
 document.getElementById('detailModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
 document.getElementById('matListModal').addEventListener('click', function(e) { if (e.target === this) closeMatList(); });
+
+// ============ PIN KORUMA ============
+const APP_PIN = '9876543210';
+
+function checkPin() {
+  const val = document.getElementById('pinInput').value;
+  if (val === APP_PIN) {
+    if (document.getElementById('pinRemember').checked) {
+      localStorage.setItem('camAuth', 'true');
+    } else {
+      sessionStorage.setItem('camAuth', 'true');
+    }
+    document.getElementById('pinOverlay').style.display = 'none';
+  } else {
+    document.getElementById('pinError').textContent = 'Hatalı PIN, tekrar deneyin.';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinInput').focus();
+  }
+}
+
+(function() {
+  const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+  if (!auth) {
+    const overlay = document.getElementById('pinOverlay');
+    overlay.style.display = 'flex';
+    setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  }
+})();
 
 // Baglanti geri gelince bekleyen degisiklikleri gonder
 window.addEventListener('online', syncPendingChanges);
