@@ -1207,30 +1207,9 @@ function renderSettingsTab() {
       <input type="text" id="settingsDevice" value="${deviceName}" placeholder="Ornek: Yasin'in Telefonu">
     </div>
     <button class="btn btn-primary btn-block" onclick="saveGithubSettings()">Kaydet ve Baglan</button>
-    ${token ? `<button class="btn btn-outline btn-block mt8" onclick="manualSync()">Manuel Senkronize Et</button>` : ''}
-    ${token ? `
-    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-      <div class="card-title">PIN Degistir</div>
-      <div class="form-group">
-        <label>Yeni PIN</label>
-        <input type="password" id="newPinInput" placeholder="Yeni PIN" inputmode="numeric" style="letter-spacing:3px">
-      </div>
-      <button class="btn btn-outline btn-block btn-sm" onclick="changePin()">PIN'i Guncelle</button>
-    </div>` : ''}`;
+    ${token ? `<button class="btn btn-outline btn-block mt8" onclick="manualSync()">Manuel Senkronize Et</button>` : ''}`;
 }
 
-async function changePin() {
-  const newPin = document.getElementById('newPinInput').value.trim();
-  if (!newPin) { showToast('Yeni PIN girin!', 'error'); return; }
-  storePin(newPin);
-  // Mevcut oturumu yeni PIN ile güncelle
-  if (localStorage.getItem('camAuth')) localStorage.setItem('camAuth', btoa(newPin));
-  if (sessionStorage.getItem('camAuth')) sessionStorage.setItem('camAuth', btoa(newPin));
-  document.getElementById('newPinInput').value = '';
-  const ok = await syncToGist(true);
-  if (ok) showToast('PIN güncellendi, tüm cihazlar senkronize edildi!', 'success');
-  else showToast('PIN yerel güncellendi. Baglanti gelince tüm cihazlara yayılacak.', 'info');
-}
 
 // ============ UTILS ============
 function fmtMoney(v) { return v.toLocaleString('tr-TR', {minimumFractionDigits:0, maximumFractionDigits:2}) + ' TL'; }
