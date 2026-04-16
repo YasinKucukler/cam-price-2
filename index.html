@@ -1214,9 +1214,9 @@ function checkPin() {
   const val = document.getElementById('pinInput').value;
   if (val === APP_PIN) {
     if (document.getElementById('pinRemember').checked) {
-      localStorage.setItem('camAuth', 'true');
+      localStorage.setItem('camAuth', APP_PIN);
     } else {
-      sessionStorage.setItem('camAuth', 'true');
+      sessionStorage.setItem('camAuth', APP_PIN);
     }
     document.getElementById('pinOverlay').style.display = 'none';
   } else {
@@ -1227,6 +1227,12 @@ function checkPin() {
 }
 
 (function() {
+  const savedPin = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+  // PIN değiştiyse kaydedilen oturumu geçersiz say
+  if (savedPin && savedPin !== APP_PIN) {
+    localStorage.removeItem('camAuth');
+    sessionStorage.removeItem('camAuth');
+  }
   const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
   if (!auth) {
     const overlay = document.getElementById('pinOverlay');
