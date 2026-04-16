@@ -623,6 +623,7 @@ function buildProductRow(p) {
         <span style="font-size:.65rem;color:var(--text2)">TL</span>
       </div>
       <button class="btn btn-success btn-sm" onclick="event.stopPropagation();addProductWithQty('${p.id}')" style="padding:4px 12px;font-size:.75rem">Ekle</button>
+      ${p.url ? `<a href="${p.url}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#ff9800;color:#fff;border-radius:6px;font-size:.85rem;text-decoration:none" title="Satin Al">🛒</a>` : ''}
     </div>`;
 
   // Show added entries
@@ -988,7 +989,12 @@ function renderPriceEditor() {
           <input type="number" value="${p.priceMax}" min="0" step="0.1" onchange="updateCatalogPrice('${p.id}','priceMax',this.value)">
         </div>`;
       }
-      html += `<button class="btn btn-danger btn-sm" onclick="deleteCatalogItem('${p.id}')" title="Sil" style="padding:4px 8px">X</button>
+      html += `<div>
+          <span class="pr-label">Link</span>
+          <input type="text" value="${p.url||''}" placeholder="https://..." style="width:90px;font-size:.72rem" onchange="updateCatalogPrice('${p.id}','url',this.value)">
+        </div>
+        ${p.url ? `<a href="${p.url}" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#ff9800;color:#fff;border-radius:6px;font-size:.85rem;text-decoration:none" title="Git">🛒</a>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="deleteCatalogItem('${p.id}')" title="Sil" style="padding:4px 8px">X</button>
       </div>`;
     });
     html += `<button class="btn btn-primary btn-block btn-sm" style="margin-top:8px" onclick="savePriceList()">Guncelle</button>`;
