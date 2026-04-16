@@ -202,8 +202,9 @@ header h1{font-size:1.15rem;font-weight:600}
   <div id="tab-prices" class="tab-content">
     <div class="card">
       <div class="card-title">Fiyat Listesi Guncelle</div>
-      <p class="text-muted mb8">Fiyatlari guncelleyin. Degisiklikler otomatik kaydedilir.</p>
+      <p class="text-muted mb8">Fiyatlari guncelleyin, ardından kaydedin.</p>
       <div id="priceEditor"></div>
+      <button class="btn btn-primary btn-block mt8" onclick="savePriceList()">Fiyatlari Kaydet ve Guncelle</button>
       <div class="new-product-form">
         <div class="card-title">Yeni Urun Ekle</div>
         <div class="row">
@@ -400,9 +401,6 @@ function getCatalog() {
 function saveCatalog(cat) {
   catalog = cat;
   localStorage.setItem('camCatalog_cache', JSON.stringify(cat));
-  // Gist sync debounceli tetiklenir (art arda fiyat degisikliklerinde tek push)
-  clearTimeout(saveCatalog._t);
-  saveCatalog._t = setTimeout(() => syncToGist(true), 1500);
 }
 
 function getProduct(id) {
@@ -979,6 +977,17 @@ function deleteCatalogItem(id) {
   saveCatalog(catalog);
   renderPriceEditor();
   renderProductGroups();
+}
+
+async function savePriceList() {
+  const { token } = getSyncConfig();
+  if (token) {
+    const ok = await syncToGist(true);
+    if (ok) showToast('Fiyat listesi kaydedildi!', 'success');
+    else showToast('Yerel kaydedildi. Baglanti gelince senkronize edilecek.', 'info');
+  } else {
+    showToast('Yerel kaydedildi!', 'success');
+  }
 }
 
 function addNewProduct() {
