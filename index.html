@@ -145,6 +145,18 @@ header h1{font-size:1.15rem;font-weight:600}
         <input type="checkbox" id="pinRemember"> Beni hatırla
       </label>
       <button onclick="checkPin()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
+      <button onclick="showAdminLogin()" style="background:none;border:none;color:#bdc1c6;font-size:.7rem;margin-top:12px;cursor:pointer;width:100%">···</button>
+    </div>
+
+    <!-- Admin girişi -->
+    <div id="pinAdminSection" style="display:none">
+      <p style="font-size:.85rem;color:#5f6368;margin-bottom:16px">Admin girişi</p>
+      <input type="password" id="adminKeyInput" maxlength="30" placeholder="Admin key"
+        style="width:100%;padding:12px;border:2px solid #dadce0;border-radius:10px;font-size:1rem;text-align:center;margin-bottom:8px;outline:none"
+        onkeydown="if(event.key==='Enter')checkAdminKey()">
+      <div id="adminKeyError" style="color:#d93025;font-size:.8rem;min-height:18px;margin-bottom:8px"></div>
+      <button onclick="checkAdminKey()" style="width:100%;padding:12px;background:#5f6368;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
+      <button onclick="showPinSection()" style="background:none;border:none;color:#bdc1c6;font-size:.75rem;margin-top:10px;cursor:pointer;width:100%">← Geri</button>
     </div>
 
     <!-- Yeni cihaz kurulum (token yoksa) -->
@@ -155,6 +167,34 @@ header h1{font-size:1.15rem;font-weight:600}
         onkeydown="if(event.key==='Enter')setupFromToken()">
       <div id="setupError" style="color:#d93025;font-size:.8rem;min-height:18px;margin-bottom:8px"></div>
       <button onclick="setupFromToken()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Devam</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN PANELİ -->
+<div id="adminOverlay" style="display:none;position:fixed;inset:0;background:#f0f2f5;z-index:9998;overflow-y:auto">
+  <div style="max-width:480px;margin:0 auto;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="font-size:1rem;font-weight:700;color:#202124">Admin Paneli</h2>
+      <button onclick="closeAdminPanel()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#5f6368">✕</button>
+    </div>
+    <!-- PIN -->
+    <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+      <div style="font-weight:600;font-size:.85rem;color:#1a73e8;margin-bottom:8px">Mevcut PIN</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="adminPinDisplay" style="font-size:1.2rem;letter-spacing:4px;font-family:monospace">••••••••••</span>
+        <button onclick="togglePinVisibility()" style="background:none;border:1px solid #dadce0;border-radius:6px;padding:4px 10px;font-size:.75rem;cursor:pointer;color:#5f6368">Göster</button>
+      </div>
+    </div>
+    <!-- Cihazlar -->
+    <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+      <div style="font-weight:600;font-size:.85rem;color:#1a73e8;margin-bottom:10px">Bağlı Cihazlar</div>
+      <div id="adminDeviceList"></div>
+    </div>
+    <!-- Changelog -->
+    <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+      <div style="font-weight:600;font-size:.85rem;color:#1a73e8;margin-bottom:10px">Değişiklik Geçmişi</div>
+      <div id="adminChangelogList"></div>
     </div>
   </div>
 </div>
@@ -495,6 +535,7 @@ async function initApp() {
 
 // İlk kurulumda varsayılan PIN'i lokalə kaydet (Gist'e bağlanınca yayılır)
 if (!getStoredPin()) storePin('9876543210');
+if (!getStoredAdminKey()) storeAdminKey('2024');
 
 initApp();
 
@@ -797,6 +838,7 @@ async function saveProject() {
     projects.unshift(data);
   }
   localStorage.setItem('camProjects_cache', JSON.stringify(projects));
+  addChangelog(editingId ? 'Proje düzenlendi' : 'Yeni proje kaydedildi', data.customer);
   resetForm();
   renderHistory();
   const { token } = getSyncConfig();
@@ -875,8 +917,10 @@ function editFromHistory(id) {
 
 async function deleteFromHistory(id) {
   if (!confirm('Bu projeyi silmek istediginize emin misiniz?')) return;
+  const p = projects.find(x => x.id === id);
   projects = projects.filter(p => p.id !== id);
   localStorage.setItem('camProjects_cache', JSON.stringify(projects));
+  addChangelog('Proje silindi', p ? p.customer : '');
   renderHistory();
   syncToGist(true);
 }
@@ -1021,14 +1065,24 @@ function updateCatalogPrice(id, field, val) {
   const catalog = getCatalog();
   const item = catalog.find(p => p.id === id);
   if (!item) return;
-  item[field] = parseFloat(val) || 0;
+  const oldVal = item[field];
+  const newVal = field === 'url' ? val : (parseFloat(val) || 0);
+  item[field] = newVal;
+  if (field === 'price' || field === 'priceMax') {
+    const label = field === 'priceMax' ? 'Max Fiyat' : 'Fiyat';
+    addChangelog('Fiyat güncellendi', `${item.name} | ${label}: ${fmtMoney(oldVal)} → ${fmtMoney(newVal)}`);
+  } else if (field === 'url') {
+    addChangelog('Link güncellendi', item.name);
+  }
   saveCatalog(catalog);
 }
 
 function deleteCatalogItem(id) {
   if (!confirm('Bu urunu katalogdan silmek istiyor musunuz?')) return;
   let catalog = getCatalog();
+  const item = catalog.find(p => p.id === id);
   catalog = catalog.filter(p => p.id !== id);
+  addChangelog('Ürün silindi', item ? `${item.group} - ${item.name}` : '');
   saveCatalog(catalog);
   renderPriceEditor();
   renderProductGroups();
@@ -1068,6 +1122,7 @@ function addNewProduct() {
   document.getElementById('newPrice').value = '';
   document.getElementById('newPriceMax').value = '';
 
+  addChangelog('Yeni ürün eklendi', `${group} - ${name} | ${fmtMoney(price)}`);
   renderPriceEditor();
   renderProductGroups();
   showToast('Urun eklendi!', 'success');
@@ -1093,12 +1148,23 @@ async function syncToGist(silent = false) {
     if (!silent) showToast('GitHub token girilmedi! Ayarlar sekmesinden ekleyin.', 'error');
     return false;
   }
+  // Cihazı devices listesinde güncelle
+  const deviceName = localStorage.getItem('camDeviceName') || 'Cihaz';
+  const devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
+  const di = devices.findIndex(d => d.name === deviceName);
+  const deviceEntry = { name: deviceName, lastSeen: new Date().toISOString() };
+  if (di >= 0) devices[di] = deviceEntry; else devices.push(deviceEntry);
+  localStorage.setItem('camDevices', JSON.stringify(devices));
+
   const payload = {
     updatedAt: new Date().toISOString(),
-    updatedBy: localStorage.getItem('camDeviceName') || 'Cihaz',
+    updatedBy: deviceName,
     projects,
     catalog,
-    pin: getStoredPin() || ''
+    pin: getStoredPin() || '',
+    adminKey: getStoredAdminKey() || '',
+    devices,
+    changelog: JSON.parse(localStorage.getItem('camChangelog') || '[]')
   };
   const body = { files: { [GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } } };
   const headers = {
@@ -1147,6 +1213,9 @@ async function syncFromGist() {
     if (content.projects) { projects = content.projects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
     if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
     if (content.pin) storePin(content.pin);
+    if (content.adminKey) storeAdminKey(content.adminKey);
+    if (content.devices) localStorage.setItem('camDevices', JSON.stringify(content.devices));
+    if (content.changelog) localStorage.setItem('camChangelog', JSON.stringify(content.changelog));
     localStorage.setItem('camLastSync', new Date().toISOString());
     localStorage.setItem('camPending', 'false');
     updateSyncBadge();
@@ -1240,6 +1309,20 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 document.getElementById('detailModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
 document.getElementById('matListModal').addEventListener('click', function(e) { if (e.target === this) closeMatList(); });
 
+// ============ CHANGELOG ============
+function addChangelog(action, details) {
+  const entry = {
+    time: new Date().toISOString(),
+    device: localStorage.getItem('camDeviceName') || 'Cihaz',
+    action,
+    details: details || ''
+  };
+  const log = JSON.parse(localStorage.getItem('camChangelog') || '[]');
+  log.unshift(entry);
+  if (log.length > 200) log.splice(200);
+  localStorage.setItem('camChangelog', JSON.stringify(log));
+}
+
 // ============ PIN KORUMA ============
 function getStoredPin() {
   const v = localStorage.getItem('camPin');
@@ -1247,6 +1330,96 @@ function getStoredPin() {
 }
 function storePin(pin) {
   localStorage.setItem('camPin', btoa(pin));
+}
+function getStoredAdminKey() {
+  const v = localStorage.getItem('camAdminKey');
+  return v ? atob(v) : null;
+}
+function storeAdminKey(key) {
+  localStorage.setItem('camAdminKey', btoa(key));
+}
+
+function showAdminLogin() {
+  document.getElementById('pinSection').style.display = 'none';
+  document.getElementById('pinAdminSection').style.display = 'block';
+  setTimeout(() => document.getElementById('adminKeyInput').focus(), 100);
+}
+function showPinSection() {
+  document.getElementById('pinAdminSection').style.display = 'none';
+  document.getElementById('pinSection').style.display = 'block';
+  setTimeout(() => document.getElementById('pinInput').focus(), 100);
+}
+
+function checkAdminKey() {
+  const val = document.getElementById('adminKeyInput').value;
+  const currentKey = getStoredAdminKey();
+  if (!currentKey) { document.getElementById('adminKeyError').textContent = 'Admin key henüz ayarlanmamış.'; return; }
+  if (val === currentKey) {
+    document.getElementById('pinOverlay').style.display = 'none';
+    document.getElementById('adminKeyInput').value = '';
+    openAdminPanel();
+  } else {
+    document.getElementById('adminKeyError').textContent = 'Hatalı key, tekrar deneyin.';
+    document.getElementById('adminKeyInput').value = '';
+    document.getElementById('adminKeyInput').focus();
+  }
+}
+
+function openAdminPanel() {
+  const pin = getStoredPin() || '-';
+  document.getElementById('adminPinDisplay').textContent = '••••••••••';
+  document.getElementById('adminPinDisplay').dataset.pin = pin;
+
+  // Cihazlar
+  const devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
+  const devEl = document.getElementById('adminDeviceList');
+  if (!devices.length) {
+    devEl.innerHTML = '<p style="font-size:.82rem;color:#5f6368">Henüz kayıtlı cihaz yok.</p>';
+  } else {
+    devEl.innerHTML = devices.sort((a,b) => new Date(b.lastSeen) - new Date(a.lastSeen)).map(d => `
+      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f3f4;font-size:.82rem">
+        <span style="font-weight:500">${esc(d.name)}</span>
+        <span style="color:#5f6368">${new Date(d.lastSeen).toLocaleString('tr-TR')}</span>
+      </div>`).join('');
+  }
+
+  // Changelog
+  const log = JSON.parse(localStorage.getItem('camChangelog') || '[]');
+  const logEl = document.getElementById('adminChangelogList');
+  if (!log.length) {
+    logEl.innerHTML = '<p style="font-size:.82rem;color:#5f6368">Henüz değişiklik yok.</p>';
+  } else {
+    logEl.innerHTML = log.slice(0, 100).map(e => `
+      <div style="padding:8px 0;border-bottom:1px solid #f1f3f4;font-size:.8rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+          <span style="font-weight:600;color:#202124">${esc(e.action)}</span>
+          <span style="color:#5f6368;font-size:.72rem">${new Date(e.time).toLocaleString('tr-TR')}</span>
+        </div>
+        <div style="color:#5f6368">${esc(e.device)}${e.details ? ' — ' + esc(e.details) : ''}</div>
+      </div>`).join('');
+  }
+
+  document.getElementById('adminOverlay').style.display = 'block';
+}
+
+function closeAdminPanel() {
+  document.getElementById('adminOverlay').style.display = 'none';
+  document.getElementById('pinOverlay').style.display = 'flex';
+  document.getElementById('pinAdminSection').style.display = 'none';
+  document.getElementById('pinSection').style.display = 'block';
+  setTimeout(() => document.getElementById('pinInput').focus(), 100);
+}
+
+function togglePinVisibility() {
+  const el = document.getElementById('adminPinDisplay');
+  const btn = el.nextElementSibling;
+  if (el.textContent === '••••••••••') {
+    el.textContent = el.dataset.pin;
+    btn.textContent = 'Gizle';
+  } else {
+    el.textContent = '••••••••••';
+    btn.textContent = 'Göster';
+  }
 }
 
 function checkPin() {
