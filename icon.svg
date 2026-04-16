@@ -2,14 +2,23 @@
   <defs>
     <linearGradient id='bg' x1='0' y1='0' x2='1' y2='1'>
       <stop offset='0%' stop-color='#1a73e8'/>
-      <stop offset='100%' stop-color='#1557b0'/>
+      <stop offset='100%' stop-color='#0d47a1'/>
     </linearGradient>
   </defs>
-  <rect width='512' height='512' rx='92' fill='url(#bg)'/>
-  <rect x='144' y='160' width='224' height='152' rx='20' fill='white' opacity='0.95'/>
-  <circle cx='256' cy='236' r='46' fill='#1a73e8'/>
-  <circle cx='256' cy='236' r='26' fill='#0d47a1'/>
-  <circle cx='246' cy='226' r='8' fill='white' opacity='0.4'/>
-  <rect x='164' y='175' width='28' height='16' rx='4' fill='white' opacity='0.95'/>
-  <text x='256' y='410' text-anchor='middle' font-family='Arial,sans-serif' font-weight='bold' font-size='82' fill='white' opacity='0.95'>TL</text>
+  <!-- Arka plan -->
+  <rect width='512' height='512' rx='100' fill='url(#bg)'/>
+  <!-- Kamera gövdesi -->
+  <rect x='96' y='180' width='320' height='210' rx='28' fill='white'/>
+  <!-- Vizör çıkıntısı -->
+  <path d='M180 180 L180 155 Q180 140 196 140 L316 140 Q332 140 332 155 L332 180 Z' fill='white'/>
+  <!-- Lens dış halkası -->
+  <circle cx='256' cy='285' r='78' fill='#1a73e8'/>
+  <!-- Lens orta -->
+  <circle cx='256' cy='285' r='55' fill='#0d47a1'/>
+  <!-- Lens iç -->
+  <circle cx='256' cy='285' r='32' fill='#1565c0'/>
+  <!-- Lens parlaması -->
+  <circle cx='238' cy='268' r='10' fill='white' opacity='0.35'/>
+  <!-- Flash -->
+  <rect x='370' y='205' width='26' height='26' rx='8' fill='#ffd54f'/>
 </svg>
