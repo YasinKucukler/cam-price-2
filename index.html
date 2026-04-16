@@ -145,18 +145,6 @@ header h1{font-size:1.15rem;font-weight:600}
         <input type="checkbox" id="pinRemember"> Beni hatırla
       </label>
       <button onclick="checkPin()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
-      <button onclick="showAdminLogin()" style="background:none;border:none;color:#bdc1c6;font-size:.7rem;margin-top:12px;cursor:pointer;width:100%">···</button>
-    </div>
-
-    <!-- Admin girişi -->
-    <div id="pinAdminSection" style="display:none">
-      <p style="font-size:.85rem;color:#5f6368;margin-bottom:16px">Admin girişi</p>
-      <input type="password" id="adminKeyInput" maxlength="30" placeholder="Admin key"
-        style="width:100%;padding:12px;border:2px solid #dadce0;border-radius:10px;font-size:1rem;text-align:center;margin-bottom:8px;outline:none"
-        onkeydown="if(event.key==='Enter')checkAdminKey()">
-      <div id="adminKeyError" style="color:#d93025;font-size:.8rem;min-height:18px;margin-bottom:8px"></div>
-      <button onclick="checkAdminKey()" style="width:100%;padding:12px;background:#5f6368;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
-      <button onclick="showPinSection()" style="background:none;border:none;color:#bdc1c6;font-size:.75rem;margin-top:10px;cursor:pointer;width:100%">← Geri</button>
     </div>
 
     <!-- Yeni cihaz kurulum (token yoksa) -->
@@ -295,6 +283,17 @@ header h1{font-size:1.15rem;font-weight:600}
     <div class="card">
       <div class="card-title">GitHub Senkronizasyonu</div>
       <div id="settingsContent"></div>
+    </div>
+    <div class="card" style="border:1px solid #dadce0">
+      <div class="card-title">Admin Paneli</div>
+      <div id="adminInSettings">
+        <div class="form-group">
+          <label>Admin Key</label>
+          <input type="password" id="adminKeySettingsInput" placeholder="Admin key" style="letter-spacing:3px" onkeydown="if(event.key==='Enter')checkAdminKeyFromSettings()">
+        </div>
+        <div id="adminKeySettingsError" style="color:#d93025;font-size:.8rem;margin-bottom:8px"></div>
+        <button class="btn btn-outline btn-block btn-sm" onclick="checkAdminKeyFromSettings()">Giris</button>
+      </div>
     </div>
     <div class="card" style="background:#fff8e1;border:1px solid #ffe082">
       <div class="card-title" style="color:#e65100">Nasil Kurulur?</div>
@@ -1339,31 +1338,6 @@ function storeAdminKey(key) {
   localStorage.setItem('camAdminKey', btoa(key));
 }
 
-function showAdminLogin() {
-  document.getElementById('pinSection').style.display = 'none';
-  document.getElementById('pinAdminSection').style.display = 'block';
-  setTimeout(() => document.getElementById('adminKeyInput').focus(), 100);
-}
-function showPinSection() {
-  document.getElementById('pinAdminSection').style.display = 'none';
-  document.getElementById('pinSection').style.display = 'block';
-  setTimeout(() => document.getElementById('pinInput').focus(), 100);
-}
-
-function checkAdminKey() {
-  const val = document.getElementById('adminKeyInput').value;
-  const currentKey = getStoredAdminKey();
-  if (!currentKey) { document.getElementById('adminKeyError').textContent = 'Admin key henüz ayarlanmamış.'; return; }
-  if (val === currentKey) {
-    document.getElementById('pinOverlay').style.display = 'none';
-    document.getElementById('adminKeyInput').value = '';
-    openAdminPanel();
-  } else {
-    document.getElementById('adminKeyError').textContent = 'Hatalı key, tekrar deneyin.';
-    document.getElementById('adminKeyInput').value = '';
-    document.getElementById('adminKeyInput').focus();
-  }
-}
 
 function openAdminPanel() {
   const pin = getStoredPin() || '-';
@@ -1404,10 +1378,24 @@ function openAdminPanel() {
 
 function closeAdminPanel() {
   document.getElementById('adminOverlay').style.display = 'none';
-  document.getElementById('pinOverlay').style.display = 'flex';
-  document.getElementById('pinAdminSection').style.display = 'none';
-  document.getElementById('pinSection').style.display = 'block';
-  setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  // Admin key inputunu temizle
+  const inp = document.getElementById('adminKeySettingsInput');
+  if (inp) inp.value = '';
+}
+
+function checkAdminKeyFromSettings() {
+  const val = document.getElementById('adminKeySettingsInput').value;
+  const currentKey = getStoredAdminKey();
+  if (!currentKey) { document.getElementById('adminKeySettingsError').textContent = 'Admin key ayarlanmamış.'; return; }
+  if (val === currentKey) {
+    document.getElementById('adminKeySettingsInput').value = '';
+    document.getElementById('adminKeySettingsError').textContent = '';
+    openAdminPanel();
+  } else {
+    document.getElementById('adminKeySettingsError').textContent = 'Hatalı key.';
+    document.getElementById('adminKeySettingsInput').value = '';
+    document.getElementById('adminKeySettingsInput').focus();
+  }
 }
 
 function togglePinVisibility() {
