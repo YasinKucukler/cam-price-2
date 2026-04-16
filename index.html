@@ -202,9 +202,8 @@ header h1{font-size:1.15rem;font-weight:600}
   <div id="tab-prices" class="tab-content">
     <div class="card">
       <div class="card-title">Fiyat Listesi Guncelle</div>
-      <p class="text-muted mb8">Fiyatlari guncelleyin, ardından kaydedin.</p>
+      <p class="text-muted mb8">Fiyatlari guncelleyin, ardından Guncelle butonuna basin.</p>
       <div id="priceEditor"></div>
-      <button class="btn btn-primary btn-block mt8" onclick="savePriceList()">Fiyatlari Kaydet ve Guncelle</button>
       <div class="new-product-form">
         <div class="card-title">Yeni Urun Ekle</div>
         <div class="row">
@@ -951,6 +950,7 @@ function renderPriceEditor() {
       html += `<button class="btn btn-danger btn-sm" onclick="deleteCatalogItem('${p.id}')" title="Sil" style="padding:4px 8px">X</button>
       </div>`;
     });
+    html += `<button class="btn btn-primary btn-block btn-sm" style="margin-top:8px" onclick="savePriceList()">Guncelle</button>`;
     html += '</div></div>';
   });
   container.innerHTML = html;
