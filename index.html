@@ -133,15 +133,29 @@ header h1{font-size:1.15rem;font-weight:600}
   <div style="background:#fff;border-radius:16px;padding:32px 24px;max-width:320px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.12);text-align:center">
     <div style="font-size:2rem;margin-bottom:8px">🔒</div>
     <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;color:#202124">CAM-O</h2>
-    <p style="font-size:.85rem;color:#5f6368;margin-bottom:20px">Devam etmek için PIN girin</p>
-    <input type="password" id="pinInput" maxlength="20" placeholder="PIN" inputmode="numeric"
-      style="width:100%;padding:12px;border:2px solid #dadce0;border-radius:10px;font-size:1.2rem;text-align:center;letter-spacing:4px;margin-bottom:8px;outline:none"
-      onkeydown="if(event.key==='Enter')checkPin()">
-    <div id="pinError" style="color:#d93025;font-size:.8rem;min-height:18px;margin-bottom:8px"></div>
-    <label style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:.85rem;color:#5f6368;margin-bottom:16px;cursor:pointer">
-      <input type="checkbox" id="pinRemember"> Beni hatırla
-    </label>
-    <button onclick="checkPin()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
+
+    <!-- PIN girişi -->
+    <div id="pinSection">
+      <p style="font-size:.85rem;color:#5f6368;margin-bottom:20px">Devam etmek için PIN girin</p>
+      <input type="password" id="pinInput" maxlength="20" placeholder="PIN" inputmode="numeric"
+        style="width:100%;padding:12px;border:2px solid #dadce0;border-radius:10px;font-size:1.2rem;text-align:center;letter-spacing:4px;margin-bottom:8px;outline:none"
+        onkeydown="if(event.key==='Enter')checkPin()">
+      <div id="pinError" style="color:#d93025;font-size:.8rem;min-height:18px;margin-bottom:8px"></div>
+      <label style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:.85rem;color:#5f6368;margin-bottom:16px;cursor:pointer">
+        <input type="checkbox" id="pinRemember"> Beni hatırla
+      </label>
+      <button onclick="checkPin()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
+    </div>
+
+    <!-- Yeni cihaz kurulum (token yoksa) -->
+    <div id="pinSetupSection" style="display:none">
+      <p style="font-size:.85rem;color:#5f6368;margin-bottom:16px">İlk kurulum için GitHub token girin</p>
+      <input type="password" id="setupToken" placeholder="ghp_xxxxxxxxxxxx"
+        style="width:100%;padding:10px;border:2px solid #dadce0;border-radius:10px;font-size:.85rem;font-family:monospace;margin-bottom:8px;outline:none"
+        onkeydown="if(event.key==='Enter')setupFromToken()">
+      <div id="setupError" style="color:#d93025;font-size:.8rem;min-height:18px;margin-bottom:8px"></div>
+      <button onclick="setupFromToken()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Devam</button>
+    </div>
   </div>
 </div>
 
@@ -471,6 +485,9 @@ async function initApp() {
     }
   }
 }
+
+// İlk kurulumda varsayılan PIN'i lokalə kaydet (Gist'e bağlanınca yayılır)
+if (!getStoredPin()) storePin('9876543210');
 
 initApp();
 
@@ -1067,7 +1084,8 @@ async function syncToGist(silent = false) {
     updatedAt: new Date().toISOString(),
     updatedBy: localStorage.getItem('camDeviceName') || 'Cihaz',
     projects,
-    catalog
+    catalog,
+    pin: getStoredPin() || ''
   };
   const body = { files: { [GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } } };
   const headers = {
@@ -1115,6 +1133,7 @@ async function syncFromGist() {
     const content = JSON.parse(file.content);
     if (content.projects) { projects = content.projects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
     if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
+    if (content.pin) storePin(content.pin);
     localStorage.setItem('camLastSync', new Date().toISOString());
     localStorage.setItem('camPending', 'false');
     updateSyncBadge();
@@ -1188,7 +1207,29 @@ function renderSettingsTab() {
       <input type="text" id="settingsDevice" value="${deviceName}" placeholder="Ornek: Yasin'in Telefonu">
     </div>
     <button class="btn btn-primary btn-block" onclick="saveGithubSettings()">Kaydet ve Baglan</button>
-    ${token ? `<button class="btn btn-outline btn-block mt8" onclick="manualSync()">Manuel Senkronize Et</button>` : ''}`;
+    ${token ? `<button class="btn btn-outline btn-block mt8" onclick="manualSync()">Manuel Senkronize Et</button>` : ''}
+    ${token ? `
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <div class="card-title">PIN Degistir</div>
+      <div class="form-group">
+        <label>Yeni PIN</label>
+        <input type="password" id="newPinInput" placeholder="Yeni PIN" inputmode="numeric" style="letter-spacing:3px">
+      </div>
+      <button class="btn btn-outline btn-block btn-sm" onclick="changePin()">PIN'i Guncelle</button>
+    </div>` : ''}`;
+}
+
+async function changePin() {
+  const newPin = document.getElementById('newPinInput').value.trim();
+  if (!newPin) { showToast('Yeni PIN girin!', 'error'); return; }
+  storePin(newPin);
+  // Mevcut oturumu yeni PIN ile güncelle
+  if (localStorage.getItem('camAuth')) localStorage.setItem('camAuth', btoa(newPin));
+  if (sessionStorage.getItem('camAuth')) sessionStorage.setItem('camAuth', btoa(newPin));
+  document.getElementById('newPinInput').value = '';
+  const ok = await syncToGist(true);
+  if (ok) showToast('PIN güncellendi, tüm cihazlar senkronize edildi!', 'success');
+  else showToast('PIN yerel güncellendi. Baglanti gelince tüm cihazlara yayılacak.', 'info');
 }
 
 // ============ UTILS ============
@@ -1208,16 +1249,22 @@ document.getElementById('detailModal').addEventListener('click', function(e) { i
 document.getElementById('matListModal').addEventListener('click', function(e) { if (e.target === this) closeMatList(); });
 
 // ============ PIN KORUMA ============
-const APP_PIN = '9876543210';
+function getStoredPin() {
+  const v = localStorage.getItem('camPin');
+  return v ? atob(v) : null;
+}
+function storePin(pin) {
+  localStorage.setItem('camPin', btoa(pin));
+}
 
 function checkPin() {
   const val = document.getElementById('pinInput').value;
-  if (val === APP_PIN) {
-    if (document.getElementById('pinRemember').checked) {
-      localStorage.setItem('camAuth', APP_PIN);
-    } else {
-      sessionStorage.setItem('camAuth', APP_PIN);
-    }
+  const currentPin = getStoredPin();
+  if (!currentPin) { document.getElementById('pinError').textContent = 'PIN henüz ayarlanmamış.'; return; }
+  if (val === currentPin) {
+    const token = document.getElementById('pinRemember').checked ? 'local' : 'session';
+    if (token === 'local') localStorage.setItem('camAuth', btoa(currentPin));
+    else sessionStorage.setItem('camAuth', btoa(currentPin));
     document.getElementById('pinOverlay').style.display = 'none';
   } else {
     document.getElementById('pinError').textContent = 'Hatalı PIN, tekrar deneyin.';
@@ -1226,18 +1273,58 @@ function checkPin() {
   }
 }
 
+async function setupFromToken() {
+  const token = document.getElementById('setupToken').value.trim();
+  if (!token) { document.getElementById('setupError').textContent = 'Token girin.'; return; }
+  document.getElementById('setupError').textContent = '';
+  // Token ile Gist'i bul (ilk gist'i ara)
+  try {
+    const res = await fetch('https://api.github.com/gists', {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    if (!res.ok) throw new Error('Token geçersiz');
+    const gists = await res.json();
+    const found = gists.find(g => g.files && g.files[GIST_FILENAME]);
+    if (!found) throw new Error('Gist bulunamadı. Önce ana cihazdan bağlanın.');
+    localStorage.setItem('camGhToken', token);
+    localStorage.setItem('camGistId', found.id);
+    // Gist'ten veriyi çek
+    const gRes = await fetch(`https://api.github.com/gists/${found.id}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    const gData = await gRes.json();
+    const content = JSON.parse(gData.files[GIST_FILENAME].content);
+    if (content.pin) storePin(content.pin);
+    if (content.projects) localStorage.setItem('camProjects_cache', JSON.stringify(content.projects));
+    if (content.catalog) localStorage.setItem('camCatalog_cache', JSON.stringify(content.catalog));
+    // PIN ekranına geç
+    document.getElementById('pinSetupSection').style.display = 'none';
+    document.getElementById('pinSection').style.display = 'block';
+    setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  } catch(e) {
+    document.getElementById('setupError').textContent = e.message;
+  }
+}
+
 (function() {
-  const savedPin = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
-  // PIN değiştiyse kaydedilen oturumu geçersiz say
-  if (savedPin && savedPin !== APP_PIN) {
+  const currentPin = getStoredPin();
+  const savedAuth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+  // PIN değiştiyse oturumu geçersiz say
+  if (savedAuth && currentPin && savedAuth !== btoa(currentPin)) {
     localStorage.removeItem('camAuth');
     sessionStorage.removeItem('camAuth');
   }
   const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
   if (!auth) {
-    const overlay = document.getElementById('pinOverlay');
-    overlay.style.display = 'flex';
-    setTimeout(() => document.getElementById('pinInput').focus(), 100);
+    document.getElementById('pinOverlay').style.display = 'flex';
+    if (!currentPin) {
+      // Yeni cihaz — token ile kurulum ekranı göster
+      document.getElementById('pinSection').style.display = 'none';
+      document.getElementById('pinSetupSection').style.display = 'block';
+      setTimeout(() => document.getElementById('setupToken').focus(), 100);
+    } else {
+      setTimeout(() => document.getElementById('pinInput').focus(), 100);
+    }
   }
 })();
 
