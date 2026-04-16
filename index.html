@@ -957,9 +957,17 @@ function renderPriceEditor() {
 }
 
 function togglePriceGroup(header) {
-  header.classList.toggle('open');
-  const body = header.nextElementSibling;
-  body.classList.toggle('show');
+  const isOpen = header.classList.contains('open');
+  // Tüm grupları kapat
+  document.querySelectorAll('.price-group-header').forEach(h => {
+    h.classList.remove('open');
+    h.nextElementSibling.classList.remove('show');
+  });
+  // Tıklanan kapalıysa aç
+  if (!isOpen) {
+    header.classList.add('open');
+    header.nextElementSibling.classList.add('show');
+  }
 }
 
 function updateCatalogPrice(id, field, val) {
