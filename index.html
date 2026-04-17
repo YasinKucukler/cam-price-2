@@ -609,18 +609,22 @@ async function initApp() {
       if (localStorage.getItem('camPending') === 'true') {
         await syncPendingChanges();
       }
-      // Her 3 dakikada bir Gist'ten otomatik çek
-      setInterval(async () => {
-        const pulled = await syncFromGist();
-        if (pulled) {
-          renderProductGroups();
-          renderHistory();
-          if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
-        }
-      }, 3 * 60 * 1000);
     }
   }
 }
+
+// Sayfa arka plandan öne gelince Gist'ten çek (sekme/telefon uyandığında)
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  const { token, gistId } = getSyncConfig();
+  if (!token || !gistId) return;
+  const pulled = await syncFromGist();
+  if (pulled) {
+    renderProductGroups();
+    renderHistory();
+    if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+  }
+});
 
 function connectServerSSE() {
   const es = new EventSource('/api/events?clientId=' + CLIENT_ID);
