@@ -1441,6 +1441,13 @@ async function saveGithubSettings() {
   localStorage.setItem('camGistId', gistId);
   localStorage.setItem('camDeviceName', deviceName);
   showToast('Ayarlar kaydedildi, baglaniyor...', 'info');
+  // Önce Gist'ten çek (mevcut veriyi koru), sonra bu cihazı ekle
+  const pulled = await syncFromGist();
+  if (pulled) {
+    renderProductGroups();
+    renderHistory();
+    renderPriceEditor();
+  }
   const ok = await syncToGist(true);
   if (ok) { showToast('Baglanti kuruldu!', 'success'); renderSettingsTab(); updateSyncBadge(); }
   else showToast('Hata - token veya Gist ID yanlis olabilir', 'error');
