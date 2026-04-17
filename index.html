@@ -1449,34 +1449,52 @@ async function manualSync() {
   renderSettingsTab();
 }
 
+async function findOrCreateGist(token) {
+  const headers = { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' };
+  // Token'a ait tüm Gist'leri tara, CAM-O olanı bul
+  let page = 1;
+  while (page <= 5) {
+    const res = await fetch(`https://api.github.com/gists?per_page=100&page=${page}`, { headers });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const list = await res.json();
+    if (!list.length) break;
+    const found = list.find(g => g.files && g.files[GIST_FILENAME]);
+    if (found) return found.id;
+    page++;
+  }
+  return null; // bulunamadı, yeni oluşturulacak
+}
+
 async function saveGithubSettings() {
   const token = document.getElementById('settingsToken').value.trim();
-  const gistId = document.getElementById('settingsGistId').value.trim();
-  const deviceName = document.getElementById('settingsDevice').value.trim() || 'Cihaz';
+  const deviceName = document.getElementById('settingsDevice').value.trim() || detectDeviceModel();
   if (!token) { showToast('Token girin!', 'error'); return; }
   localStorage.setItem('camGhToken', token);
-  localStorage.setItem('camGistId', gistId);
   localStorage.setItem('camDeviceName', deviceName);
-  showToast('Ayarlar kaydedildi, baglaniyor...', 'info');
-  if (gistId) {
-    // Var olan Gist'e bağlan: sadece pull yap, mevcut veriyi koru
-    const pulled = await syncFromGist();
-    if (pulled) {
-      renderProductGroups();
-      renderHistory();
-      renderPriceEditor();
-      showToast('Baglanti kuruldu!', 'success');
-      renderSettingsTab();
-      updateSyncBadge();
+  showToast('Baglanti kuruluyor...', 'info');
+  try {
+    const existingId = await findOrCreateGist(token);
+    if (existingId) {
+      // Mevcut Gist bulundu — sadece pull yap
+      localStorage.setItem('camGistId', existingId);
+      const pulled = await syncFromGist();
+      if (pulled) {
+        renderProductGroups(); renderHistory(); renderPriceEditor();
+        showToast('Baglanti kuruldu! Veriler senkronize edildi.', 'success');
+      } else {
+        showToast('Gist bulundu ama veri alinamadi.', 'error');
+      }
     } else {
-      showToast('Hata - token veya Gist ID yanlis olabilir', 'error');
+      // CAM-O Gist yok — yeni oluştur
+      const ok = await syncToGist(true);
+      if (ok) showToast('Yeni Gist olusturuldu, baglanti kuruldu!', 'success');
+      else showToast('Hata - token yanlis olabilir', 'error');
     }
-  } else {
-    // Yeni Gist oluştur
-    const ok = await syncToGist(true);
-    if (ok) { showToast('Baglanti kuruldu!', 'success'); renderSettingsTab(); updateSyncBadge(); }
-    else showToast('Hata - token yanlis olabilir', 'error');
+  } catch(e) {
+    showToast('Hata: ' + e.message, 'error');
   }
+  renderSettingsTab();
+  updateSyncBadge();
 }
 
 function renderSettingsTab() {
@@ -1498,10 +1516,6 @@ function renderSettingsTab() {
     <div class="form-group">
       <label>GitHub Personal Access Token <span style="font-size:.75rem;color:var(--text2)">(gist yetkisi)</span></label>
       <input type="password" id="settingsToken" value="${token}" placeholder="ghp_xxxxxxxxxxxx" style="font-family:monospace">
-    </div>
-    <div class="form-group">
-      <label>Gist ID <span style="font-size:.75rem;color:var(--text2)">(bos birakin: otomatik olusturulur)</span></label>
-      <input type="text" id="settingsGistId" value="${gistId}" placeholder="" style="font-family:monospace;font-size:.78rem">
     </div>
     <div class="form-group">
       <label>Cihaz Adi</label>
