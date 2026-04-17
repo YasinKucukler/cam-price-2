@@ -1379,6 +1379,7 @@ async function syncToGist(silent = false) {
 
 async function syncFromGist() {
   const { token, gistId } = getSyncConfig();
+  console.log('[SYNC] syncFromGist çağrıldı. token:', !!token, '| gistId:', gistId || '(yok)');
   if (!token || !gistId) return false;
   try {
     const res = await fetch(`https://api.github.com/gists/${gistId}`, {
