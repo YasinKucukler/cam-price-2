@@ -438,6 +438,8 @@ const DEFAULT_CATALOG = [
 const LABOR_RATE = 0.30;
 const LABOR_MIN = 4000;
 const GIST_FILENAME = 'cam-o-data.json';
+const CLIENT_ID = localStorage.getItem('camClientId') || (() => { const id = Math.random().toString(36).slice(2); localStorage.setItem('camClientId', id); return id; })();
+const IS_SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 function getSyncConfig() {
   return {
@@ -477,6 +479,13 @@ function getCatalog() {
 function saveCatalog(cat) {
   catalog = cat;
   localStorage.setItem('camCatalog_cache', JSON.stringify(cat));
+  if (IS_SERVER) {
+    fetch('/api/catalog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID },
+      body: JSON.stringify(cat)
+    }).catch(() => {});
+  }
 }
 
 function getProduct(id) {
@@ -516,20 +525,61 @@ async function initApp() {
   updateMatCount();
   updateSyncBadge();
 
-  // GitHub Gist varsa: en guncel veriyi cek
-  const { token, gistId } = getSyncConfig();
-  if (token && gistId) {
-    const ok = await syncFromGist();
-    if (ok) {
+  if (IS_SERVER) {
+    // Sunucudan guncel veriyi cek
+    try {
+      const [catRes, projRes] = await Promise.all([
+        fetch('/api/catalog'),
+        fetch('/api/projects')
+      ]);
+      const serverCatalog = await catRes.json();
+      const serverProjects = await projRes.json();
+      if (serverCatalog) { catalog = serverCatalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
+      if (serverProjects) { projects = serverProjects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
       renderProductGroups();
       renderHistory();
-      if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
-    }
-    // Bekleyen degisiklik varsa gonder
-    if (localStorage.getItem('camPending') === 'true') {
-      await syncPendingChanges();
+    } catch(e) {}
+
+    // SSE ile diger cihazlarin degisikliklerini dinle
+    connectServerSSE();
+  } else {
+    // GitHub Gist varsa: en guncel veriyi cek
+    const { token, gistId } = getSyncConfig();
+    if (token && gistId) {
+      const ok = await syncFromGist();
+      if (ok) {
+        renderProductGroups();
+        renderHistory();
+        if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+      }
+      if (localStorage.getItem('camPending') === 'true') {
+        await syncPendingChanges();
+      }
     }
   }
+}
+
+function connectServerSSE() {
+  const es = new EventSource('/api/events?clientId=' + CLIENT_ID);
+  es.addEventListener('catalog', (e) => {
+    const data = JSON.parse(e.data);
+    catalog = data;
+    localStorage.setItem('camCatalog_cache', JSON.stringify(catalog));
+    renderProductGroups();
+    if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+    showToast('Fiyat listesi guncellendi', 'info');
+  });
+  es.addEventListener('projects', (e) => {
+    const data = JSON.parse(e.data);
+    projects = data;
+    localStorage.setItem('camProjects_cache', JSON.stringify(projects));
+    renderHistory();
+    showToast('Projeler guncellendi', 'info');
+  });
+  es.onerror = () => {
+    es.close();
+    setTimeout(connectServerSSE, 5000);
+  };
 }
 
 // İlk kurulumda varsayılan PIN'i lokalə kaydet (Gist'e bağlanınca yayılır)
@@ -840,13 +890,22 @@ async function saveProject() {
   addChangelog(editingId ? 'Proje düzenlendi' : 'Yeni proje kaydedildi', data.customer);
   resetForm();
   renderHistory();
-  const { token } = getSyncConfig();
-  if (token) {
-    const ok = await syncToGist(true);
-    if (ok) showToast('Kaydedildi ve senkronize edildi!', 'success');
-    else showToast('Yerel kaydedildi. Baglanti gelince senkronize edilecek.', 'info');
-  } else {
+  if (IS_SERVER) {
+    await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID },
+      body: JSON.stringify(projects)
+    }).catch(() => {});
     showToast('Kaydedildi!', 'success');
+  } else {
+    const { token } = getSyncConfig();
+    if (token) {
+      const ok = await syncToGist(true);
+      if (ok) showToast('Kaydedildi ve senkronize edildi!', 'success');
+      else showToast('Yerel kaydedildi. Baglanti gelince senkronize edilecek.', 'info');
+    } else {
+      showToast('Kaydedildi!', 'success');
+    }
   }
 }
 
@@ -921,7 +980,11 @@ async function deleteFromHistory(id) {
   localStorage.setItem('camProjects_cache', JSON.stringify(projects));
   addChangelog('Proje silindi', p ? p.customer : '');
   renderHistory();
-  syncToGist(true);
+  if (IS_SERVER) {
+    fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID }, body: JSON.stringify(projects) }).catch(() => {});
+  } else {
+    syncToGist(true);
+  }
 }
 
 // ============ HISTORY ============
@@ -987,7 +1050,11 @@ async function deleteProject(id) {
   localStorage.setItem('camProjects_cache', JSON.stringify(projects));
   closeModal();
   renderHistory();
-  syncToGist(true);
+  if (IS_SERVER) {
+    fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID }, body: JSON.stringify(projects) }).catch(() => {});
+  } else {
+    syncToGist(true);
+  }
 }
 
 function loadToEditor() {
@@ -1088,6 +1155,10 @@ function deleteCatalogItem(id) {
 }
 
 async function savePriceList() {
+  if (IS_SERVER) {
+    showToast('Fiyat listesi kaydedildi!', 'success');
+    return;
+  }
   const { token } = getSyncConfig();
   if (token) {
     const ok = await syncToGist(true);
