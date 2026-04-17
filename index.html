@@ -609,7 +609,7 @@ async function initApp() {
       if (ok) {
         renderProductGroups();
         renderHistory();
-        if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+        renderPriceEditor();
       }
       if (localStorage.getItem('camPending') === 'true') {
         await syncPendingChanges();
@@ -632,6 +632,7 @@ async function fetchLatestPrices() {
   if (pulled) {
     renderProductGroups();
     renderHistory();
+    renderPriceEditor();
     showToast('Fiyatlar güncellendi!', 'success');
   } else {
     showToast('Güncel veri alınamadı.', 'error');
@@ -647,7 +648,7 @@ document.addEventListener('visibilitychange', async () => {
   if (pulled) {
     renderProductGroups();
     renderHistory();
-    if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+    renderPriceEditor();
   }
 });
 
@@ -658,7 +659,7 @@ function connectServerSSE() {
     catalog = data;
     localStorage.setItem('camCatalog_cache', JSON.stringify(catalog));
     renderProductGroups();
-    if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+    renderPriceEditor();
     showToast('Fiyat listesi guncellendi', 'info');
   });
   es.addEventListener('projects', (e) => {
@@ -1424,7 +1425,7 @@ async function manualSync() {
   if (pulled) {
     renderHistory();
     renderProductGroups();
-    if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+    renderPriceEditor();
   }
   await syncToGist(true);
   showToast('Senkronizasyon tamamlandi!', 'success');
