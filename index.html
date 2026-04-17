@@ -1257,10 +1257,11 @@ async function syncToGist(silent = false) {
   }
   // Cihazı devices listesinde güncelle
   const deviceName = localStorage.getItem('camDeviceName') || detectDeviceModel();
-  const devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
-  const di = devices.findIndex(d => d.id === CLIENT_ID);
+  let devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
   const deviceEntry = { id: CLIENT_ID, name: deviceName, model: detectDeviceModel(), lastSeen: new Date().toISOString() };
-  if (di >= 0) devices[di] = deviceEntry; else devices.push(deviceEntry);
+  // Aynı CLIENT_ID'ye sahip tüm kayıtları kaldır (eski isimli olanlar dahil)
+  devices = devices.filter(d => d.id !== CLIENT_ID);
+  devices.push(deviceEntry);
   localStorage.setItem('camDevices', JSON.stringify(devices));
 
   const payload = {
@@ -1321,7 +1322,16 @@ async function syncFromGist() {
     if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
     if (content.pin) storePin(content.pin);
     if (content.adminKey) storeAdminKey(content.adminKey);
-    if (content.devices) localStorage.setItem('camDevices', JSON.stringify(content.devices));
+    if (content.devices) {
+      // id'si olan kayıtlar tekil; id'si olmayanlar arasında aynı isimden sadece en yenisini tut
+      const seen = new Map();
+      content.devices.forEach(d => {
+        const key = d.id || d.name;
+        const existing = seen.get(key);
+        if (!existing || new Date(d.lastSeen) > new Date(existing.lastSeen)) seen.set(key, d);
+      });
+      localStorage.setItem('camDevices', JSON.stringify([...seen.values()]));
+    }
     if (content.changelog) localStorage.setItem('camChangelog', JSON.stringify(content.changelog));
     localStorage.setItem('camLastSync', new Date().toISOString());
     localStorage.setItem('camPending', 'false');
