@@ -1480,7 +1480,7 @@ function renderAdminContent() {
           <span style="font-weight:600">${esc(d.name)}</span>
           <span style="color:#5f6368;font-size:.72rem">${new Date(d.lastSeen).toLocaleString('tr-TR')}</span>
         </div>
-        <div style="color:#9aa0a6;font-size:.72rem;margin-top:2px">${d.model ? esc(d.model) + ' · ' : ''}ID: ${esc((d.id || '?').slice(0,8))}</div>
+        <div style="color:#9aa0a6;font-size:.72rem;margin-top:2px">${d.model && d.model !== d.name ? esc(d.model) + ' · ' : ''}${d.id ? 'ID: ' + esc(d.id.slice(0,8)) : '<i>güncelleme bekleniyor</i>'}</div>
       </div>`).join('');
   }
 
