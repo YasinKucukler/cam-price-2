@@ -1,4 +1,4 @@
-const CACHE_NAME = 'camo-v19';
+const CACHE_NAME = 'camo-v20';
 const ASSETS = [
   './',
   './index.html',

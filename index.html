@@ -520,6 +520,7 @@ function updateSyncBadge() {
 // ============ CATALOG MANAGEMENT ============
 let catalog = JSON.parse(JSON.stringify(DEFAULT_CATALOG));
 let projects = [];
+let _catalogDirty = false; // kaydedilmemiş fiyat değişikliği var mı
 
 function getCatalog() {
   return catalog;
@@ -527,10 +528,12 @@ function getCatalog() {
 
 function saveCatalog(cat) {
   catalog = cat; // sadece memory, localStorage'a yazmaz
+  _catalogDirty = true;
 }
 
 function persistCatalog() {
   localStorage.setItem('camCatalog_cache', JSON.stringify(catalog));
+  _catalogDirty = false;
   if (IS_SERVER) {
     fetch('/api/catalog', {
       method: 'POST',
@@ -1200,7 +1203,7 @@ function renderPriceEditor() {
         <button class="btn btn-danger btn-sm" onclick="deleteCatalogItem('${p.id}')" title="Sil" style="padding:4px 8px">X</button>
       </div>`;
     });
-    html += `<button class="btn btn-primary btn-block btn-sm" style="margin-top:8px" onclick="persistCatalog();showToast('Fiyatlar kaydedildi!','success')">Guncelle</button>`;
+    html += `<button class="btn btn-primary btn-block btn-sm" style="margin-top:8px" onclick="persistCatalog();showToast('Fiyatlar kaydedildi (local)!','success')">Guncelle</button>`;
     html += '</div></div>';
   });
   container.innerHTML = html;
@@ -1385,7 +1388,7 @@ async function syncFromGist() {
     if (!file) throw new Error('Dosya bulunamadi');
     const content = JSON.parse(file.content);
     if (content.projects) { projects = content.projects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
-    if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
+    if (content.catalog && !_catalogDirty) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
     if (content.pin) storePin(content.pin);
     if (content.adminKey) storeAdminKey(content.adminKey);
     if (content.devices) {
