@@ -1499,11 +1499,10 @@ function renderSettingsTab() {
       <label>GitHub Personal Access Token <span style="font-size:.75rem;color:var(--text2)">(gist yetkisi)</span></label>
       <input type="password" id="settingsToken" value="${token}" placeholder="ghp_xxxxxxxxxxxx" style="font-family:monospace">
     </div>
-    ${gistId ? `<input type="hidden" id="settingsGistId" value="${gistId}">` : `
     <div class="form-group">
       <label>Gist ID <span style="font-size:.75rem;color:var(--text2)">(bos birakin: otomatik olusturulur)</span></label>
-      <input type="text" id="settingsGistId" value="" placeholder="">
-    </div>`}
+      <input type="text" id="settingsGistId" value="${gistId}" placeholder="" style="font-family:monospace;font-size:.78rem">
+    </div>
     <div class="form-group">
       <label>Cihaz Adi</label>
       <input type="text" id="settingsDevice" value="${deviceName}" placeholder="${detectDeviceModel()}">
