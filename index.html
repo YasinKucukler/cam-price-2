@@ -1329,8 +1329,8 @@ async function syncToGist(silent = false) {
   const deviceName = localStorage.getItem('camDeviceName') || detectDeviceModel();
   let devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
   const deviceEntry = { id: CLIENT_ID, name: deviceName, model: detectDeviceModel(), lastSeen: new Date().toISOString() };
-  // Sadece bu cihazın önceki kaydını kaldır (id eşleşmesi), diğer cihazlara dokunma
-  devices = devices.filter(d => d.id !== CLIENT_ID);
+  // Bu cihazın önceki tüm kayıtlarını kaldır (id veya aynı isimli id'siz eski kayıtlar)
+  devices = devices.filter(d => d.id !== CLIENT_ID && !(d.name === deviceName && !d.id));
   devices.push(deviceEntry);
   localStorage.setItem('camDevices', JSON.stringify(devices));
 
@@ -1363,6 +1363,7 @@ async function syncToGist(silent = false) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (!gistId) localStorage.setItem('camGistId', data.id);
+    console.log('[SYNC] Gist yazıldı. ID:', data.id, '| Device:', deviceName);
     localStorage.setItem('camPending', 'false');
     localStorage.setItem('camLastSync', new Date().toISOString());
     updateSyncBadge();
@@ -1388,19 +1389,34 @@ async function syncFromGist() {
     const file = data.files[GIST_FILENAME];
     if (!file) throw new Error('Dosya bulunamadi');
     const content = JSON.parse(file.content);
+    console.log('[SYNC] Gist ID:', gistId, '| updatedAt:', content.updatedAt, '| updatedBy:', content.updatedBy);
     if (content.projects) { projects = content.projects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
     if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
     if (content.pin) storePin(content.pin);
     if (content.adminKey) storeAdminKey(content.adminKey);
     if (content.devices) {
-      // id'si olan kayıtlar tekil; id'si olmayanlar arasında aynı isimden sadece en yenisini tut
-      const seen = new Map();
+      // id'ye göre tekilleştir; aynı id varsa en yenisini tut
+      const byId = new Map();
+      const noId = [];
       content.devices.forEach(d => {
-        const key = d.id || d.name;
-        const existing = seen.get(key);
-        if (!existing || new Date(d.lastSeen) > new Date(existing.lastSeen)) seen.set(key, d);
+        if (d.id) {
+          const ex = byId.get(d.id);
+          if (!ex || new Date(d.lastSeen) > new Date(ex.lastSeen)) byId.set(d.id, d);
+        } else {
+          noId.push(d);
+        }
       });
-      localStorage.setItem('camDevices', JSON.stringify([...seen.values()]));
+      // id'si olan cihazların isimlerini topla
+      const namedIds = new Set([...byId.values()].map(d => d.name));
+      // id'siz kayıtları sadece aynı isimde id'li kayıt yoksa ekle
+      const seenNames = new Set();
+      noId.forEach(d => {
+        if (!namedIds.has(d.name) && !seenNames.has(d.name)) {
+          byId.set('noId_' + d.name, d);
+          seenNames.add(d.name);
+        }
+      });
+      localStorage.setItem('camDevices', JSON.stringify([...byId.values()]));
     }
     if (content.changelog) localStorage.setItem('camChangelog', JSON.stringify(content.changelog));
     localStorage.setItem('camLastSync', new Date().toISOString());
