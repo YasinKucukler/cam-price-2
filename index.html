@@ -114,11 +114,16 @@ header h1{font-size:1.15rem;font-weight:600}
 .mt8{margin-top:8px}.mb8{margin-bottom:8px}
 
 /* Toast */
-.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:10px;color:#fff;font-weight:600;font-size:.9rem;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;text-align:center;max-width:90%;box-shadow:0 4px 12px rgba(0,0,0,.2)}
-.toast.show{opacity:1}
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.85);padding:16px 28px;border-radius:14px;color:#fff;font-weight:600;font-size:1rem;z-index:99999;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;text-align:center;max-width:85%;box-shadow:0 8px 32px rgba(0,0,0,.28)}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .toast-success{background:#1e8e3e}
 .toast-error{background:#d93025}
 .toast-info{background:#1a73e8}
+
+/* Sync Confirm Modal */
+#syncConfirmModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99998;align-items:center;justify-content:center}
+#syncConfirmModal.show{display:flex}
+#syncConfirmBox{background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.18)}
 
 @media(max-width:480px){
   .mat-item{flex-wrap:wrap}
@@ -313,6 +318,18 @@ header h1{font-size:1.15rem;font-weight:600}
 </div>
 
 <div id="toast" class="toast"></div>
+
+<div id="syncConfirmModal">
+  <div id="syncConfirmBox">
+    <div style="font-size:1.5rem;margin-bottom:10px">🔄</div>
+    <div style="font-weight:700;font-size:1rem;margin-bottom:8px;color:#202124">Cihazları Senkronize Et</div>
+    <div style="font-size:.88rem;color:#5f6368;margin-bottom:20px">Bağlı tüm cihazlar senkronize edilecek. Emin misiniz?</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeSyncConfirm()" style="flex:1;padding:12px;border:1.5px solid #dadce0;border-radius:10px;background:#fff;font-size:.95rem;font-weight:600;cursor:pointer;color:#5f6368">İptal</button>
+      <button onclick="confirmSync()" style="flex:1;padding:12px;border:none;border-radius:10px;background:#1a73e8;color:#fff;font-size:.95rem;font-weight:600;cursor:pointer">Evet, Senkronize Et</button>
+    </div>
+  </div>
+</div>
 
 <!-- Material List Modal -->
 <div class="modal-overlay" id="matListModal">
@@ -1195,19 +1212,28 @@ function deleteCatalogItem(id) {
   renderProductGroups();
 }
 
-async function syncPriceList() {
+function syncPriceList() {
   const key = prompt('Senkronizasyon için admin şifresini girin:');
   if (key === null) return;
   if (key !== getStoredAdminKey()) { showToast('Hatalı şifre!', 'error'); return; }
+  document.getElementById('syncConfirmModal').classList.add('show');
+}
+
+function closeSyncConfirm() {
+  document.getElementById('syncConfirmModal').classList.remove('show');
+}
+
+async function confirmSync() {
+  closeSyncConfirm();
   persistCatalog();
   if (IS_SERVER) {
-    showToast('Fiyat listesi senkronize edildi!', 'success');
+    showToast('Tüm bağlı cihazlar senkronize edildi!', 'success');
     return;
   }
   const { token } = getSyncConfig();
   if (!token) { showToast('GitHub token girilmemiş!', 'error'); return; }
   const ok = await syncToGist(true);
-  if (ok) showToast('Fiyat listesi tüm cihazlara senkronize edildi!', 'success');
+  if (ok) showToast('Tüm bağlı cihazlar senkronize edildi!', 'success');
   else showToast('Bağlantı hatası, tekrar deneyin.', 'error');
 }
 
@@ -1440,7 +1466,7 @@ function showToast(msg, type) {
   t.textContent = msg;
   t.className = 'toast toast-' + type + ' show';
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.classList.remove('show'); }, 2500);
+  t._timer = setTimeout(() => { t.classList.remove('show'); }, 3000);
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
