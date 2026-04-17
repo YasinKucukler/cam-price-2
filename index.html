@@ -609,6 +609,15 @@ async function initApp() {
       if (localStorage.getItem('camPending') === 'true') {
         await syncPendingChanges();
       }
+      // Her 3 dakikada bir Gist'ten otomatik çek
+      setInterval(async () => {
+        const pulled = await syncFromGist();
+        if (pulled) {
+          renderProductGroups();
+          renderHistory();
+          if (document.getElementById('tab-prices').classList.contains('active')) renderPriceEditor();
+        }
+      }, 3 * 60 * 1000);
     }
   }
 }
@@ -1290,8 +1299,8 @@ async function syncToGist(silent = false) {
   const deviceName = localStorage.getItem('camDeviceName') || detectDeviceModel();
   let devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
   const deviceEntry = { id: CLIENT_ID, name: deviceName, model: detectDeviceModel(), lastSeen: new Date().toISOString() };
-  // id'si olmayan eski format kayıtları temizle, aynı CLIENT_ID'li kaydı güncelle
-  devices = devices.filter(d => d.id && d.id !== CLIENT_ID);
+  // Sadece bu cihazın önceki kaydını kaldır (id eşleşmesi), diğer cihazlara dokunma
+  devices = devices.filter(d => d.id !== CLIENT_ID);
   devices.push(deviceEntry);
   localStorage.setItem('camDevices', JSON.stringify(devices));
 
