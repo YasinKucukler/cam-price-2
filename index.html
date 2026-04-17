@@ -273,6 +273,7 @@ header h1{font-size:1.15rem;font-weight:600}
       <div class="card-title">Fiyat Listesi Guncelle</div>
       <p class="text-muted mb8">Fiyatlari guncelleyin, ardından Guncelle butonuna basin.</p>
       <div id="priceEditor"></div>
+      <button class="btn btn-success btn-block" style="margin-top:8px" onclick="syncPriceList()">Fiyat Listesi Senkronize Et</button>
       <div class="new-product-form">
         <div class="card-title">Yeni Urun Ekle</div>
         <div class="row">
@@ -507,13 +508,16 @@ function getCatalog() {
 }
 
 function saveCatalog(cat) {
-  catalog = cat;
-  localStorage.setItem('camCatalog_cache', JSON.stringify(cat));
+  catalog = cat; // sadece memory, localStorage'a yazmaz
+}
+
+function persistCatalog() {
+  localStorage.setItem('camCatalog_cache', JSON.stringify(catalog));
   if (IS_SERVER) {
     fetch('/api/catalog', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID },
-      body: JSON.stringify(cat)
+      body: JSON.stringify(catalog)
     }).catch(() => {});
   }
 }
@@ -1144,7 +1148,7 @@ function renderPriceEditor() {
         <button class="btn btn-danger btn-sm" onclick="deleteCatalogItem('${p.id}')" title="Sil" style="padding:4px 8px">X</button>
       </div>`;
     });
-    html += `<button class="btn btn-primary btn-block btn-sm" style="margin-top:8px" onclick="savePriceList()">Guncelle</button>`;
+    html += `<button class="btn btn-primary btn-block btn-sm" style="margin-top:8px" onclick="persistCatalog();showToast('Fiyatlar kaydedildi!','success')">Guncelle</button>`;
     html += '</div></div>';
   });
   container.innerHTML = html;
@@ -1191,19 +1195,20 @@ function deleteCatalogItem(id) {
   renderProductGroups();
 }
 
-async function savePriceList() {
+async function syncPriceList() {
+  const key = prompt('Senkronizasyon için admin şifresini girin:');
+  if (key === null) return;
+  if (key !== getStoredAdminKey()) { showToast('Hatalı şifre!', 'error'); return; }
+  persistCatalog();
   if (IS_SERVER) {
-    showToast('Fiyat listesi kaydedildi!', 'success');
+    showToast('Fiyat listesi senkronize edildi!', 'success');
     return;
   }
   const { token } = getSyncConfig();
-  if (token) {
-    const ok = await syncToGist(true);
-    if (ok) showToast('Fiyat listesi kaydedildi!', 'success');
-    else showToast('Yerel kaydedildi. Baglanti gelince senkronize edilecek.', 'info');
-  } else {
-    showToast('Yerel kaydedildi!', 'success');
-  }
+  if (!token) { showToast('GitHub token girilmemiş!', 'error'); return; }
+  const ok = await syncToGist(true);
+  if (ok) showToast('Fiyat listesi tüm cihazlara senkronize edildi!', 'success');
+  else showToast('Bağlantı hatası, tekrar deneyin.', 'error');
 }
 
 function addNewProduct() {

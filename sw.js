@@ -1,4 +1,4 @@
-const CACHE_NAME = 'camo-v14';
+const CACHE_NAME = 'camo-v15';
 const ASSETS = [
   './',
   './index.html',
