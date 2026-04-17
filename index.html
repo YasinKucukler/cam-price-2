@@ -1437,9 +1437,8 @@ function storeAdminKey(key) {
 }
 
 
-function openAdminPanel() {
+function renderAdminContent() {
   const pin = getStoredPin() || '-';
-  document.getElementById('adminPinDisplay').textContent = '••••••••••';
   document.getElementById('adminPinDisplay').dataset.pin = pin;
 
   // Cihazlar
@@ -1470,8 +1469,18 @@ function openAdminPanel() {
         <div style="color:#5f6368">${esc(e.device)}${e.details ? ' — ' + esc(e.details) : ''}</div>
       </div>`).join('');
   }
+}
 
+async function openAdminPanel() {
+  const pin = getStoredPin() || '-';
+  document.getElementById('adminPinDisplay').textContent = '••••••••••';
+  document.getElementById('adminPinDisplay').dataset.pin = pin;
+  document.getElementById('adminDeviceList').innerHTML = '<p style="font-size:.82rem;color:#5f6368">Yükleniyor...</p>';
   document.getElementById('adminOverlay').style.display = 'block';
+
+  // Gist'ten taze veri çek, sonra göster
+  await syncFromGist();
+  renderAdminContent();
 }
 
 function closeAdminPanel() {
