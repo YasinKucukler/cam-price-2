@@ -1441,16 +1441,25 @@ async function saveGithubSettings() {
   localStorage.setItem('camGistId', gistId);
   localStorage.setItem('camDeviceName', deviceName);
   showToast('Ayarlar kaydedildi, baglaniyor...', 'info');
-  // Önce Gist'ten çek (mevcut veriyi koru), sonra bu cihazı ekle
-  const pulled = await syncFromGist();
-  if (pulled) {
-    renderProductGroups();
-    renderHistory();
-    renderPriceEditor();
+  if (gistId) {
+    // Var olan Gist'e bağlan: sadece pull yap, mevcut veriyi koru
+    const pulled = await syncFromGist();
+    if (pulled) {
+      renderProductGroups();
+      renderHistory();
+      renderPriceEditor();
+      showToast('Baglanti kuruldu!', 'success');
+      renderSettingsTab();
+      updateSyncBadge();
+    } else {
+      showToast('Hata - token veya Gist ID yanlis olabilir', 'error');
+    }
+  } else {
+    // Yeni Gist oluştur
+    const ok = await syncToGist(true);
+    if (ok) { showToast('Baglanti kuruldu!', 'success'); renderSettingsTab(); updateSyncBadge(); }
+    else showToast('Hata - token yanlis olabilir', 'error');
   }
-  const ok = await syncToGist(true);
-  if (ok) { showToast('Baglanti kuruldu!', 'success'); renderSettingsTab(); updateSyncBadge(); }
-  else showToast('Hata - token veya Gist ID yanlis olabilir', 'error');
 }
 
 function renderSettingsTab() {
