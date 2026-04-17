@@ -469,6 +469,8 @@ function detectDeviceModel() {
 // Cihaz adı hiç ayarlanmamışsa otomatik doldur
 if (!localStorage.getItem('camDeviceName')) {
   localStorage.setItem('camDeviceName', detectDeviceModel());
+  // Eski kod 'Cihaz' defaultunu Gist'e yazmış olabilir, bir sonraki sync'te temizle
+  localStorage.setItem('camOldDeviceNames', JSON.stringify(['Cihaz']));
 }
 
 function getSyncConfig() {
@@ -1259,8 +1261,14 @@ async function syncToGist(silent = false) {
   const deviceName = localStorage.getItem('camDeviceName') || detectDeviceModel();
   let devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
   const deviceEntry = { id: CLIENT_ID, name: deviceName, model: detectDeviceModel(), lastSeen: new Date().toISOString() };
-  // Aynı CLIENT_ID'ye sahip tüm kayıtları kaldır (eski isimli olanlar dahil)
-  devices = devices.filter(d => d.id !== CLIENT_ID);
+  // Aynı CLIENT_ID'yi veya bu cihazın eski isimlerini kaldır
+  const oldNames = JSON.parse(localStorage.getItem('camOldDeviceNames') || '[]');
+  devices = devices.filter(d => {
+    if (d.id === CLIENT_ID) return false;
+    if (!d.id && oldNames.includes(d.name)) return false;
+    return true;
+  });
+  if (oldNames.length) localStorage.removeItem('camOldDeviceNames');
   devices.push(deviceEntry);
   localStorage.setItem('camDevices', JSON.stringify(devices));
 
