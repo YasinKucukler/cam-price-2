@@ -296,14 +296,7 @@ header h1{font-size:1.15rem;font-weight:600}
     </div>
     <div class="card" style="border:1px solid #dadce0">
       <div class="card-title">Admin Paneli</div>
-      <div id="adminInSettings">
-        <div class="form-group">
-          <label>Admin Key</label>
-          <input type="password" id="adminKeySettingsInput" placeholder="Admin key" style="letter-spacing:3px" onkeydown="if(event.key==='Enter')checkAdminKeyFromSettings()">
-        </div>
-        <div id="adminKeySettingsError" style="color:#d93025;font-size:.8rem;margin-bottom:8px"></div>
-        <button class="btn btn-outline btn-block btn-sm" onclick="checkAdminKeyFromSettings()">Giris</button>
-      </div>
+      <div id="adminInSettings"></div>
     </div>
     <div class="card" style="background:#fff8e1;border:1px solid #ffe082">
       <div class="card-title" style="color:#e65100">Nasil Kurulur?</div>
@@ -1377,6 +1370,22 @@ function renderSettingsTab() {
     </div>
     <button class="btn btn-primary btn-block" onclick="saveGithubSettings()">Kaydet ve Baglan</button>
     ${token ? `<button class="btn btn-outline btn-block mt8" onclick="manualSync()">Manuel Senkronize Et</button>` : ''}`;
+
+  const adminEl = document.getElementById('adminInSettings');
+  if (adminEl) {
+    if (isAdminSessionValid()) {
+      adminEl.innerHTML = `<button class="btn btn-outline btn-block btn-sm" onclick="openAdminPanel()">Admin Panelini Ac</button>
+        <div style="font-size:.75rem;color:#5f6368;margin-top:6px;text-align:center">Oturum aktif (15 dk)</div>`;
+    } else {
+      adminEl.innerHTML = `
+        <div class="form-group">
+          <label>Admin Key</label>
+          <input type="password" id="adminKeySettingsInput" placeholder="Admin key" style="letter-spacing:3px" onkeydown="if(event.key==='Enter')checkAdminKeyFromSettings()">
+        </div>
+        <div id="adminKeySettingsError" style="color:#d93025;font-size:.8rem;margin-bottom:8px"></div>
+        <button class="btn btn-outline btn-block btn-sm" onclick="checkAdminKeyFromSettings()">Giris</button>`;
+    }
+  }
 }
 
 
@@ -1404,9 +1413,10 @@ function addChangelog(action, details) {
     action,
     details: details || ''
   };
-  const log = JSON.parse(localStorage.getItem('camChangelog') || '[]');
+  const cutoff = Date.now() - 20 * 24 * 60 * 60 * 1000;
+  let log = JSON.parse(localStorage.getItem('camChangelog') || '[]');
+  log = log.filter(e => new Date(e.time).getTime() > cutoff);
   log.unshift(entry);
-  if (log.length > 200) log.splice(200);
   localStorage.setItem('camChangelog', JSON.stringify(log));
 }
 
@@ -1471,6 +1481,15 @@ function closeAdminPanel() {
   if (inp) inp.value = '';
 }
 
+function isAdminSessionValid() {
+  const exp = sessionStorage.getItem('camAdminExp');
+  return exp && Date.now() < Number(exp);
+}
+
+function grantAdminSession() {
+  sessionStorage.setItem('camAdminExp', String(Date.now() + 15 * 60 * 1000));
+}
+
 function checkAdminKeyFromSettings() {
   const val = document.getElementById('adminKeySettingsInput').value;
   const currentKey = getStoredAdminKey();
@@ -1478,6 +1497,7 @@ function checkAdminKeyFromSettings() {
   if (val === currentKey) {
     document.getElementById('adminKeySettingsInput').value = '';
     document.getElementById('adminKeySettingsError').textContent = '';
+    grantAdminSession();
     openAdminPanel();
   } else {
     document.getElementById('adminKeySettingsError').textContent = 'Hatalı key.';
