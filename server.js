@@ -22,7 +22,7 @@ function readData() {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
   } catch(e) {
-    return { catalog: null, projects: [] };
+    return { catalog: null, projects: [], pin: null };
   }
 }
 
@@ -90,6 +90,20 @@ app.post('/api/projects', (req, res) => {
   writeData(data);
   broadcast('projects', data.projects, req.headers['x-client-id']);
   console.log('Projeler guncellendi');
+  res.json({ ok: true });
+});
+
+// ============ PIN API ============
+app.get('/api/pin', (req, res) => {
+  const data = readData();
+  res.json({ pin: data.pin || null });
+});
+
+app.post('/api/pin', (req, res) => {
+  const data = readData();
+  data.pin = req.body.pin;
+  writeData(data);
+  broadcast('pin', { pin: data.pin }, req.headers['x-client-id']);
   res.json({ ok: true });
 });
 

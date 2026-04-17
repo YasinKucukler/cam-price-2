@@ -168,10 +168,20 @@ header h1{font-size:1.15rem;font-weight:600}
     </div>
     <!-- PIN -->
     <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
-      <div style="font-weight:600;font-size:.85rem;color:#1a73e8;margin-bottom:8px">Mevcut PIN</div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="font-weight:600;font-size:.85rem;color:#1a73e8;margin-bottom:8px">Giriş PIN</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <span id="adminPinDisplay" style="font-size:1.2rem;letter-spacing:4px;font-family:monospace">••••••••••</span>
         <button onclick="togglePinVisibility()" style="background:none;border:1px solid #dadce0;border-radius:6px;padding:4px 10px;font-size:.75rem;cursor:pointer;color:#5f6368">Göster</button>
+      </div>
+      <div id="changePinForm">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <input type="password" id="newPinInput" placeholder="Yeni PIN" inputmode="numeric" maxlength="20"
+            style="padding:10px;border:1.5px solid #dadce0;border-radius:8px;font-size:16px;outline:none;letter-spacing:3px">
+          <input type="password" id="newPinConfirm" placeholder="Yeni PIN (tekrar)" inputmode="numeric" maxlength="20"
+            style="padding:10px;border:1.5px solid #dadce0;border-radius:8px;font-size:16px;outline:none;letter-spacing:3px">
+          <div id="changePinError" style="color:#d93025;font-size:.8rem;min-height:16px"></div>
+          <button onclick="changePin()" style="padding:10px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">PIN Değiştir</button>
+        </div>
       </div>
     </div>
     <!-- Cihazlar -->
@@ -528,14 +538,17 @@ async function initApp() {
   if (IS_SERVER) {
     // Sunucudan guncel veriyi cek
     try {
-      const [catRes, projRes] = await Promise.all([
+      const [catRes, projRes, pinRes] = await Promise.all([
         fetch('/api/catalog'),
-        fetch('/api/projects')
+        fetch('/api/projects'),
+        fetch('/api/pin')
       ]);
       const serverCatalog = await catRes.json();
       const serverProjects = await projRes.json();
+      const serverPin = await pinRes.json();
       if (serverCatalog) { catalog = serverCatalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
       if (serverProjects) { projects = serverProjects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
+      if (serverPin.pin) storePin(serverPin.pin);
       renderProductGroups();
       renderHistory();
     } catch(e) {}
@@ -575,6 +588,10 @@ function connectServerSSE() {
     localStorage.setItem('camProjects_cache', JSON.stringify(projects));
     renderHistory();
     showToast('Projeler guncellendi', 'info');
+  });
+  es.addEventListener('pin', (e) => {
+    const data = JSON.parse(e.data);
+    if (data.pin) storePin(data.pin);
   });
   es.onerror = () => {
     es.close();
@@ -1479,6 +1496,35 @@ function togglePinVisibility() {
     el.textContent = '••••••••••';
     btn.textContent = 'Göster';
   }
+}
+
+async function changePin() {
+  const newPin = document.getElementById('newPinInput').value;
+  const confirm = document.getElementById('newPinConfirm').value;
+  const errEl = document.getElementById('changePinError');
+  errEl.textContent = '';
+  if (!newPin) { errEl.textContent = 'Yeni PIN girin.'; return; }
+  if (newPin.length < 4) { errEl.textContent = 'PIN en az 4 karakter olmalı.'; return; }
+  if (newPin !== confirm) { errEl.textContent = 'PINler eşleşmiyor.'; return; }
+  storePin(newPin);
+  // Oturumu yeni PIN ile güncelle
+  if (localStorage.getItem('camAuth')) localStorage.setItem('camAuth', btoa(newPin));
+  else sessionStorage.setItem('camAuth', btoa(newPin));
+  document.getElementById('adminPinDisplay').textContent = '••••••••••';
+  document.getElementById('adminPinDisplay').dataset.pin = newPin;
+  document.getElementById('newPinInput').value = '';
+  document.getElementById('newPinConfirm').value = '';
+  if (IS_SERVER) {
+    fetch('/api/pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID },
+      body: JSON.stringify({ pin: newPin })
+    }).catch(() => {});
+  } else {
+    const { token } = getSyncConfig();
+    if (token) await syncToGist(true);
+  }
+  showToast('PIN değiştirildi!', 'success');
 }
 
 function checkPin() {
