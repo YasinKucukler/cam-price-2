@@ -217,6 +217,7 @@ header h1{font-size:1.15rem;font-weight:600}
 
   <!-- CALCULATOR TAB -->
   <div id="tab-calc" class="tab-content active">
+    <button id="fetchPricesBtn" class="btn btn-outline btn-block" style="margin-bottom:10px" onclick="fetchLatestPrices()">Güncel Fiyatları Al</button>
     <div class="card">
       <div class="card-title">Musteri Bilgisi</div>
       <div class="row">
@@ -596,6 +597,7 @@ async function initApp() {
 
     // SSE ile diger cihazlarin degisikliklerini dinle
     connectServerSSE();
+    document.getElementById('fetchPricesBtn').style.display = 'none';
   } else {
     // GitHub Gist varsa: en guncel veriyi cek
     const { token, gistId } = getSyncConfig();
@@ -609,7 +611,27 @@ async function initApp() {
       if (localStorage.getItem('camPending') === 'true') {
         await syncPendingChanges();
       }
+    } else {
+      document.getElementById('fetchPricesBtn').style.display = 'none';
     }
+  }
+}
+
+async function fetchLatestPrices() {
+  const { token, gistId } = getSyncConfig();
+  if (!token || !gistId) { showToast('GitHub bağlantısı yok!', 'error'); return; }
+  const btn = document.getElementById('fetchPricesBtn');
+  btn.disabled = true;
+  btn.textContent = 'Alınıyor...';
+  const pulled = await syncFromGist();
+  btn.disabled = false;
+  btn.textContent = 'Güncel Fiyatları Al';
+  if (pulled) {
+    renderProductGroups();
+    renderHistory();
+    showToast('Fiyatlar güncellendi!', 'success');
+  } else {
+    showToast('Güncel veri alınamadı.', 'error');
   }
 }
 
