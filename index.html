@@ -444,6 +444,33 @@ const GIST_FILENAME = 'cam-o-data.json';
 const CLIENT_ID = localStorage.getItem('camClientId') || (() => { const id = Math.random().toString(36).slice(2); localStorage.setItem('camClientId', id); return id; })();
 const IS_SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+function detectDeviceModel() {
+  const ua = navigator.userAgent;
+  // iPhone
+  const iphone = ua.match(/iPhone OS ([\d_]+)/);
+  if (iphone) return 'iPhone (iOS ' + iphone[1].replace(/_/g, '.') + ')';
+  // iPad
+  if (/iPad/.test(ua)) return 'iPad';
+  // Android — model adı UA'da "Android x.x; MODEL" şeklinde
+  const android = ua.match(/Android[\s/][\d.]+;\s*([^)]+)\)/);
+  if (android) {
+    const model = android[1].trim().split(';').pop().trim();
+    return model || 'Android Cihaz';
+  }
+  // Windows
+  if (/Windows NT/.test(ua)) return 'Windows PC';
+  // Mac
+  if (/Macintosh/.test(ua)) return 'Mac';
+  // Linux
+  if (/Linux/.test(ua)) return 'Linux';
+  return 'Cihaz';
+}
+
+// Cihaz adı hiç ayarlanmamışsa otomatik doldur
+if (!localStorage.getItem('camDeviceName')) {
+  localStorage.setItem('camDeviceName', detectDeviceModel());
+}
+
 function getSyncConfig() {
   return {
     token: localStorage.getItem('camGhToken') || '',
@@ -1229,10 +1256,10 @@ async function syncToGist(silent = false) {
     return false;
   }
   // Cihazı devices listesinde güncelle
-  const deviceName = localStorage.getItem('camDeviceName') || 'Cihaz';
+  const deviceName = localStorage.getItem('camDeviceName') || detectDeviceModel();
   const devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
-  const di = devices.findIndex(d => d.name === deviceName);
-  const deviceEntry = { name: deviceName, lastSeen: new Date().toISOString() };
+  const di = devices.findIndex(d => d.id === CLIENT_ID);
+  const deviceEntry = { id: CLIENT_ID, name: deviceName, model: detectDeviceModel(), lastSeen: new Date().toISOString() };
   if (di >= 0) devices[di] = deviceEntry; else devices.push(deviceEntry);
   localStorage.setItem('camDevices', JSON.stringify(devices));
 
@@ -1365,8 +1392,8 @@ function renderSettingsTab() {
       <input type="text" id="settingsGistId" value="" placeholder="">
     </div>`}
     <div class="form-group">
-      <label>Cihaz Adi <span style="font-size:.75rem;color:var(--text2)">(opsiyonel)</span></label>
-      <input type="text" id="settingsDevice" value="${deviceName}" placeholder="Ornek: Yasin'in Telefonu">
+      <label>Cihaz Adi</label>
+      <input type="text" id="settingsDevice" value="${deviceName}" placeholder="${detectDeviceModel()}">
     </div>
     <button class="btn btn-primary btn-block" onclick="saveGithubSettings()">Kaydet ve Baglan</button>
     ${token ? `<button class="btn btn-outline btn-block mt8" onclick="manualSync()">Manuel Senkronize Et</button>` : ''}`;
@@ -1448,9 +1475,12 @@ function renderAdminContent() {
     devEl.innerHTML = '<p style="font-size:.82rem;color:#5f6368">Henüz kayıtlı cihaz yok.</p>';
   } else {
     devEl.innerHTML = devices.sort((a,b) => new Date(b.lastSeen) - new Date(a.lastSeen)).map(d => `
-      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f3f4;font-size:.82rem">
-        <span style="font-weight:500">${esc(d.name)}</span>
-        <span style="color:#5f6368">${new Date(d.lastSeen).toLocaleString('tr-TR')}</span>
+      <div style="padding:7px 0;border-bottom:1px solid #f1f3f4;font-size:.82rem">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600">${esc(d.name)}</span>
+          <span style="color:#5f6368;font-size:.72rem">${new Date(d.lastSeen).toLocaleString('tr-TR')}</span>
+        </div>
+        <div style="color:#9aa0a6;font-size:.72rem;margin-top:2px">${d.model ? esc(d.model) + ' · ' : ''}ID: ${esc((d.id || '?').slice(0,8))}</div>
       </div>`).join('');
   }
 
