@@ -461,7 +461,7 @@ const LABOR_RATE = 0.30;
 const LABOR_MIN = 4000;
 const GIST_FILENAME = 'cam-o-data.json';
 const CLIENT_ID = localStorage.getItem('camClientId') || (() => { const id = Math.random().toString(36).slice(2); localStorage.setItem('camClientId', id); return id; })();
-const IS_SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const IS_SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '3000';
 
 function detectDeviceModel() {
   const ua = navigator.userAgent;
@@ -614,6 +614,7 @@ async function initApp() {
       if (localStorage.getItem('camPending') === 'true') {
         await syncPendingChanges();
       }
+      startGistPolling();
     } else {
       document.getElementById('fetchPricesBtn').style.display = 'none';
     }
@@ -637,6 +638,23 @@ async function fetchLatestPrices() {
   } else {
     showToast('Güncel veri alınamadı.', 'error');
   }
+}
+
+// Gist polling: 30 saniyede bir otomatik çek (IS_SERVER değilse)
+let _gistPollTimer = null;
+function startGistPolling() {
+  if (_gistPollTimer) return;
+  _gistPollTimer = setInterval(async () => {
+    if (IS_SERVER) return;
+    const { token, gistId } = getSyncConfig();
+    if (!token || !gistId) return;
+    const pulled = await syncFromGist();
+    if (pulled) {
+      renderProductGroups();
+      renderHistory();
+      renderPriceEditor();
+    }
+  }, 300000);
 }
 
 // Sayfa arka plandan öne gelince Gist'ten çek (sekme/telefon uyandığında)
