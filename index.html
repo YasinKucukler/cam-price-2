@@ -1435,6 +1435,13 @@ async function syncFromGist() {
           seenNames.add(d.name);
         }
       });
+      // Yerel cikazlari da birlestir (24 saat icindeyse) — overwrite'i onle
+      const localDevices = JSON.parse(localStorage.getItem('camDevices') || '[]');
+      localDevices.forEach(d => {
+        if (d.id && !byId.has(d.id) && Date.now() - new Date(d.lastSeen || 0).getTime() < 86400000) {
+          byId.set(d.id, d);
+        }
+      });
       localStorage.setItem('camDevices', JSON.stringify([...byId.values()]));
     }
     if (content.changelog) localStorage.setItem('camChangelog', JSON.stringify(content.changelog));
@@ -1613,7 +1620,14 @@ function renderAdminContent() {
   document.getElementById('adminPinDisplay').dataset.pin = pin;
 
   // Cihazlar
-  const devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
+  const allDevices = JSON.parse(localStorage.getItem('camDevices') || '[]');
+  // Isme gore deduplicate: ayni isimde birden fazla kayit varsa en yenisini goster
+  const byName = new Map();
+  allDevices.forEach(d => {
+    const ex = byName.get(d.name);
+    if (!ex || new Date(d.lastSeen) > new Date(ex.lastSeen)) byName.set(d.name, d);
+  });
+  const devices = [...byName.values()];
   const devEl = document.getElementById('adminDeviceList');
   if (!devices.length) {
     devEl.innerHTML = '<p style="font-size:.82rem;color:#5f6368">Henüz kayıtlı cihaz yok.</p>';
