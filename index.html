@@ -1413,6 +1413,15 @@ async function syncFromGist() {
     if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
     if (content.pin) storePin(content.pin);
     if (content.adminKey) storeAdminKey(content.adminKey);
+    // Uzaktan sifirlama komutu kontrol et
+    if (content.pendingReset && content.pendingReset.includes(CLIENT_ID)) {
+      ['camGhToken','camGistId','camDeviceName','camDevices','camProjects_cache',
+       'camCatalog_cache','camPending','camLastSync','camLastPulledAt','camChangelog','camClientId']
+        .forEach(k => localStorage.removeItem(k));
+      showToast('Bu cihazın uygulama verileri uzaktan sıfırlandı.', 'info');
+      setTimeout(() => location.reload(), 2500);
+      return false;
+    }
     if (content.devices) {
       // id'ye göre tekilleştir; aynı id varsa en yenisini tut
       const byId = new Map();
@@ -1459,6 +1468,33 @@ async function syncPendingChanges() {
   showToast('Bekleyen degisiklikler gonderiliyor...', 'info');
   const ok = await syncToGist(true);
   if (ok) showToast('Bekleyen degisiklikler gonderildi!', 'success');
+}
+
+async function resetDeviceData(id, name) {
+  if (!confirm(`"${name}" cihazının uygulama verileri sıfırlanacak. Cihaz bir sonraki açılışta bu komutu görecek ve tüm uygulama verilerini temizleyecek. Devam edilsin mi?`)) return;
+  const { token, gistId } = getSyncConfig();
+  if (!token || !gistId) { showToast('Gist bağlantısı yok!', 'error'); return; }
+  // Mevcut Gist'i çek, pendingReset listesine ekle
+  try {
+    const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const file = data.files[GIST_FILENAME];
+    const content = file ? JSON.parse(file.content) : {};
+    const pendingReset = content.pendingReset || [];
+    if (!pendingReset.includes(id)) pendingReset.push(id);
+    content.pendingReset = pendingReset;
+    await fetch(`https://api.github.com/gists/${gistId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(content, null, 2) } } })
+    });
+    showToast(`"${name}" cihazına sıfırlama komutu gönderildi.`, 'success');
+  } catch(e) {
+    showToast('Hata: komut gönderilemedi.', 'error');
+  }
 }
 
 async function disconnectDevice(id, name) {
@@ -1657,7 +1693,10 @@ function renderAdminContent() {
           <span style="font-weight:600">${esc(d.name)}</span>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="color:#5f6368;font-size:.72rem">${new Date(d.lastSeen).toLocaleString('tr-TR')}</span>
-            ${d.id !== CLIENT_ID ? `<button onclick="disconnectDevice('${esc(d.id || '')}','${esc(d.name)}')" style="background:none;border:none;cursor:pointer;color:#e53935;font-size:.75rem;padding:2px 6px;border-radius:4px;border:1px solid #e53935" title="Cihazı çıkar">✕</button>` : '<span style="font-size:.7rem;color:#1a73e8">(bu cihaz)</span>'}
+            ${d.id !== CLIENT_ID ? `
+              <button onclick="resetDeviceData('${esc(d.id || '')}','${esc(d.name)}')" style="background:none;border:none;cursor:pointer;color:#f57c00;font-size:.72rem;padding:2px 6px;border-radius:4px;border:1px solid #f57c00" title="Verileri sıfırla">Sıfırla</button>
+              <button onclick="disconnectDevice('${esc(d.id || '')}','${esc(d.name)}')" style="background:none;border:none;cursor:pointer;color:#e53935;font-size:.75rem;padding:2px 6px;border-radius:4px;border:1px solid #e53935" title="Cihazı çıkar">✕</button>
+            ` : '<span style="font-size:.7rem;color:#1a73e8">(bu cihaz)</span>'}
           </div>
         </div>
         <div style="color:#9aa0a6;font-size:.72rem;margin-top:2px">${d.model && d.model !== d.name ? esc(d.model) + ' · ' : ''}${d.id ? 'ID: ' + esc(d.id.slice(0,8)) : '<i>güncelleme bekleniyor</i>'}</div>
