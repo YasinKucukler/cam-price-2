@@ -1461,6 +1461,25 @@ async function syncPendingChanges() {
   if (ok) showToast('Bekleyen degisiklikler gonderildi!', 'success');
 }
 
+async function disconnectDevice(id, name) {
+  if (!confirm(`"${name}" cihazını listeden çıkarmak istiyor musunuz?`)) return;
+  let devices = JSON.parse(localStorage.getItem('camDevices') || '[]');
+  devices = devices.filter(d => d.id !== id && d.name !== name);
+  localStorage.setItem('camDevices', JSON.stringify(devices));
+  // Gist'e de yaz
+  const { token, gistId } = getSyncConfig();
+  if (token && gistId) {
+    const payload = { updatedAt: new Date().toISOString(), updatedBy: localStorage.getItem('camDeviceName') || detectDeviceModel(), projects, catalog, pin: getStoredPin() || '', adminKey: getStoredAdminKey() || '', devices, changelog: JSON.parse(localStorage.getItem('camChangelog') || '[]') };
+    await fetch(`https://api.github.com/gists/${gistId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } } })
+    }).catch(() => {});
+  }
+  renderAdminContent();
+  showToast(`"${name}" listeden çıkarıldı.`, 'success');
+}
+
 async function manualSync() {
   showToast('Senkronize ediliyor...', 'info');
   const pulled = await syncFromGist();
@@ -1636,7 +1655,10 @@ function renderAdminContent() {
       <div style="padding:7px 0;border-bottom:1px solid #f1f3f4;font-size:.82rem">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">${esc(d.name)}</span>
-          <span style="color:#5f6368;font-size:.72rem">${new Date(d.lastSeen).toLocaleString('tr-TR')}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="color:#5f6368;font-size:.72rem">${new Date(d.lastSeen).toLocaleString('tr-TR')}</span>
+            ${d.id !== CLIENT_ID ? `<button onclick="disconnectDevice('${esc(d.id || '')}','${esc(d.name)}')" style="background:none;border:none;cursor:pointer;color:#e53935;font-size:.75rem;padding:2px 6px;border-radius:4px;border:1px solid #e53935" title="Cihazı çıkar">✕</button>` : '<span style="font-size:.7rem;color:#1a73e8">(bu cihaz)</span>'}
+          </div>
         </div>
         <div style="color:#9aa0a6;font-size:.72rem;margin-top:2px">${d.model && d.model !== d.name ? esc(d.model) + ' · ' : ''}${d.id ? 'ID: ' + esc(d.id.slice(0,8)) : '<i>güncelleme bekleniyor</i>'}</div>
       </div>`).join('');
