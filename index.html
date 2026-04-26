@@ -190,7 +190,7 @@ header h1{font-size:1.15rem;font-weight:600}
       <div style="font-weight:600;font-size:.85rem;color:#1a73e8;margin-bottom:8px">Giriş PIN</div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <span id="adminPinDisplay" style="font-size:1.2rem;letter-spacing:4px;font-family:monospace">••••••••••</span>
-        <button onclick="togglePinVisibility()" style="background:none;border:1px solid #dadce0;border-radius:6px;padding:4px 10px;font-size:.75rem;cursor:pointer;color:#5f6368">Göster</button>
+        <span style="font-size:.72rem;color:#5f6368;background:#f1f3f4;padding:3px 8px;border-radius:6px">🔒 hash korumalı</span>
       </div>
       <div id="changePinForm">
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -650,9 +650,10 @@ function closeAdminKeyModal() {
   document.getElementById('adminKeyModal').style.display = 'none';
   _adminKeyCallback = null;
 }
-function submitAdminKeyModal() {
+async function submitAdminKeyModal() {
   const val = document.getElementById('adminKeyModalInput').value;
-  if (val === getStoredAdminKey()) {
+  const hashed = await sha256(val);
+  if (hashed === getStoredAdminKey()) {
     const cb = _adminKeyCallback;
     closeAdminKeyModal();
     if (cb) cb();
@@ -692,7 +693,7 @@ async function initApp() {
       const serverPin = await pinRes.json();
       if (serverCatalog) { catalog = serverCatalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
       if (serverProjects) { projects = serverProjects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
-      if (serverPin.pin) storePin(serverPin.pin);
+      if (serverPin.pin) await storePin(serverPin.pin);
       renderProductGroups();
       renderHistory();
     } catch(e) {}
@@ -788,7 +789,7 @@ function connectServerSSE() {
   });
   es.addEventListener('pin', (e) => {
     const data = JSON.parse(e.data);
-    if (data.pin) storePin(data.pin);
+    if (data.pin) await storePin(data.pin);
   });
   es.onerror = () => {
     es.close();
@@ -796,11 +797,33 @@ function connectServerSSE() {
   };
 }
 
-// İlk kurulumda varsayılan PIN'i lokalə kaydet (Gist'e bağlanınca yayılır)
-if (!getStoredPin()) storePin('9876543210');
-if (!getStoredAdminKey()) storeAdminKey('2024');
-
-initApp();
+async function startup() {
+  // Eski base64 kayıtları SHA-256'ya yükselt
+  await migrateCredentials();
+  // Varsayılan PIN/key (ilk kurulum — Gist'e bağlanınca yayılır)
+  if (!getStoredPin()) await storePin('9876543210');
+  if (!getStoredAdminKey()) await storeAdminKey('2024');
+  // Oturum kontrolü
+  const currentPin = getStoredPin();
+  const savedAuth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+  if (savedAuth && currentPin && savedAuth !== currentPin) {
+    localStorage.removeItem('camAuth');
+    sessionStorage.removeItem('camAuth');
+  }
+  const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+  if (!auth) {
+    document.getElementById('pinOverlay').style.display = 'flex';
+    if (!currentPin) {
+      document.getElementById('pinSection').style.display = 'none';
+      document.getElementById('pinSetupSection').style.display = 'block';
+      setTimeout(() => document.getElementById('setupToken').focus(), 100);
+    } else {
+      setTimeout(() => document.getElementById('pinInput').focus(), 100);
+    }
+  }
+  initApp();
+}
+startup();
 
 // ============ PRODUCT GROUP BUTTONS ============
 function getGroupCounts() {
@@ -1596,8 +1619,8 @@ async function syncFromGist() {
     console.log('[SYNC] Gist ID:', gistId, '| updatedAt:', content.updatedAt, '| updatedBy:', content.updatedBy);
     if (content.projects) { projects = content.projects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
     if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
-    if (content.pin) storePin(content.pin);
-    if (content.adminKey) storeAdminKey(content.adminKey);
+    if (content.pin) await storePin(content.pin);
+    if (content.adminKey) await storeAdminKey(content.adminKey);
     // Uzaktan sifirlama komutu kontrol et
     if (content.pendingReset && content.pendingReset.includes(CLIENT_ID)) {
       ['camGhToken','camGistId','camDeviceName','camDevices','camProjects_cache',
@@ -1909,26 +1932,47 @@ function addChangelog(action, details) {
   localStorage.setItem('camChangelog', JSON.stringify(log));
 }
 
-// ============ PIN KORUMA ============
-function getStoredPin() {
-  const v = localStorage.getItem('camPin');
-  return v ? atob(v) : null;
+// ============ PIN KORUMA — SHA-256 hash ============
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-function storePin(pin) {
-  localStorage.setItem('camPin', btoa(pin));
+
+function isHash(v) { return typeof v === 'string' && /^[0-9a-f]{64}$/i.test(v); }
+
+function getStoredPin() { return localStorage.getItem('camPin') || null; }
+async function storePin(value) {
+  const hash = isHash(value) ? value : await sha256(value);
+  localStorage.setItem('camPin', hash);
 }
-function getStoredAdminKey() {
-  const v = localStorage.getItem('camAdminKey');
-  return v ? atob(v) : null;
+
+function getStoredAdminKey() { return localStorage.getItem('camAdminKey') || null; }
+async function storeAdminKey(value) {
+  const hash = isHash(value) ? value : await sha256(value);
+  localStorage.setItem('camAdminKey', hash);
 }
-function storeAdminKey(key) {
-  localStorage.setItem('camAdminKey', btoa(key));
+
+// Eski base64 kayıtları SHA-256'ya yükselt (tek seferlik)
+async function migrateCredentials() {
+  const pin = localStorage.getItem('camPin');
+  if (pin && !isHash(pin)) {
+    try { await storePin(atob(pin)); } catch(e) {}
+  }
+  const key = localStorage.getItem('camAdminKey');
+  if (key && !isHash(key)) {
+    try { await storeAdminKey(atob(key)); } catch(e) {}
+  }
+  // Eski btoa tabanlı camAuth oturumlarını temizle (hash ile eşleşmez)
+  const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+  const storedPin = getStoredPin();
+  if (auth && storedPin && !isHash(auth)) {
+    localStorage.removeItem('camAuth');
+    sessionStorage.removeItem('camAuth');
+  }
 }
 
 
 function renderAdminContent() {
-  const pin = getStoredPin() || '-';
-  document.getElementById('adminPinDisplay').dataset.pin = pin;
 
   // Cihazlar
   const allDevices = JSON.parse(localStorage.getItem('camDevices') || '[]');
@@ -1977,9 +2021,7 @@ function renderAdminContent() {
 }
 
 async function openAdminPanel() {
-  const pin = getStoredPin() || '-';
   document.getElementById('adminPinDisplay').textContent = '••••••••••';
-  document.getElementById('adminPinDisplay').dataset.pin = pin;
   document.getElementById('adminDeviceList').innerHTML = '<p style="font-size:.82rem;color:#5f6368">Yükleniyor...</p>';
   document.getElementById('adminOverlay').style.display = 'block';
 
@@ -2004,11 +2046,12 @@ function grantAdminSession() {
   sessionStorage.setItem('camAdminExp', String(Date.now() + 15 * 60 * 1000));
 }
 
-function checkAdminKeyFromSettings() {
+async function checkAdminKeyFromSettings() {
   const val = document.getElementById('adminKeySettingsInput').value;
   const currentKey = getStoredAdminKey();
   if (!currentKey) { document.getElementById('adminKeySettingsError').textContent = 'Admin key ayarlanmamış.'; return; }
-  if (val === currentKey) {
+  const hashed = await sha256(val);
+  if (hashed === currentKey) {
     document.getElementById('adminKeySettingsInput').value = '';
     document.getElementById('adminKeySettingsError').textContent = '';
     grantAdminSession();
@@ -2021,54 +2064,46 @@ function checkAdminKeyFromSettings() {
 }
 
 function togglePinVisibility() {
-  const el = document.getElementById('adminPinDisplay');
-  const btn = el.nextElementSibling;
-  if (el.textContent === '••••••••••') {
-    el.textContent = el.dataset.pin;
-    btn.textContent = 'Gizle';
-  } else {
-    el.textContent = '••••••••••';
-    btn.textContent = 'Göster';
-  }
+  showToast('Güvenlik: PIN hash korumalı, görüntülenemiyor.', 'info');
 }
 
 async function changePin() {
   const newPin = document.getElementById('newPinInput').value;
-  const confirm = document.getElementById('newPinConfirm').value;
+  const confirmPin = document.getElementById('newPinConfirm').value;
   const errEl = document.getElementById('changePinError');
   errEl.textContent = '';
   if (!newPin) { errEl.textContent = 'Yeni PIN girin.'; return; }
   if (newPin.length < 4) { errEl.textContent = 'PIN en az 4 karakter olmalı.'; return; }
-  if (newPin !== confirm) { errEl.textContent = 'PINler eşleşmiyor.'; return; }
-  storePin(newPin);
-  // Oturumu yeni PIN ile güncelle
-  if (localStorage.getItem('camAuth')) localStorage.setItem('camAuth', btoa(newPin));
-  else sessionStorage.setItem('camAuth', btoa(newPin));
+  if (newPin !== confirmPin) { errEl.textContent = 'PINler eşleşmiyor.'; return; }
+  await storePin(newPin);
+  const hashedPin = getStoredPin();
+  // Oturumu yeni hash ile güncelle
+  if (localStorage.getItem('camAuth')) localStorage.setItem('camAuth', hashedPin);
+  else sessionStorage.setItem('camAuth', hashedPin);
   document.getElementById('adminPinDisplay').textContent = '••••••••••';
-  document.getElementById('adminPinDisplay').dataset.pin = newPin;
   document.getElementById('newPinInput').value = '';
   document.getElementById('newPinConfirm').value = '';
+  showToast('PIN değiştirildi!', 'success');
   if (IS_SERVER) {
     fetch('/api/pin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID },
-      body: JSON.stringify({ pin: newPin })
+      body: JSON.stringify({ pin: hashedPin })  // düz metin değil, hash gönder
     }).catch(() => {});
   } else {
     const { token } = getSyncConfig();
     if (token) await syncToGist(true);
   }
-  showToast('PIN değiştirildi!', 'success');
 }
 
-function checkPin() {
+async function checkPin() {
   const val = document.getElementById('pinInput').value;
   const currentPin = getStoredPin();
   if (!currentPin) { document.getElementById('pinError').textContent = 'PIN henüz ayarlanmamış.'; return; }
-  if (val === currentPin) {
-    const token = document.getElementById('pinRemember').checked ? 'local' : 'session';
-    if (token === 'local') localStorage.setItem('camAuth', btoa(currentPin));
-    else sessionStorage.setItem('camAuth', btoa(currentPin));
+  const hashed = await sha256(val);
+  if (hashed === currentPin) {
+    if (document.getElementById('pinRemember').checked) localStorage.setItem('camAuth', currentPin);
+    else sessionStorage.setItem('camAuth', currentPin);
     document.getElementById('pinOverlay').style.display = 'none';
   } else {
     document.getElementById('pinError').textContent = 'Hatalı PIN, tekrar deneyin.';
@@ -2098,7 +2133,7 @@ async function setupFromToken() {
     });
     const gData = await gRes.json();
     const content = JSON.parse(gData.files[GIST_FILENAME].content);
-    if (content.pin) storePin(content.pin);
+    if (content.pin) await storePin(content.pin);
     if (content.projects) localStorage.setItem('camProjects_cache', JSON.stringify(content.projects));
     if (content.catalog) localStorage.setItem('camCatalog_cache', JSON.stringify(content.catalog));
     // PIN ekranına geç
@@ -2110,27 +2145,6 @@ async function setupFromToken() {
   }
 }
 
-(function() {
-  const currentPin = getStoredPin();
-  const savedAuth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
-  // PIN değiştiyse oturumu geçersiz say
-  if (savedAuth && currentPin && savedAuth !== btoa(currentPin)) {
-    localStorage.removeItem('camAuth');
-    sessionStorage.removeItem('camAuth');
-  }
-  const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
-  if (!auth) {
-    document.getElementById('pinOverlay').style.display = 'flex';
-    if (!currentPin) {
-      // Yeni cihaz — token ile kurulum ekranı göster
-      document.getElementById('pinSection').style.display = 'none';
-      document.getElementById('pinSetupSection').style.display = 'block';
-      setTimeout(() => document.getElementById('setupToken').focus(), 100);
-    } else {
-      setTimeout(() => document.getElementById('pinInput').focus(), 100);
-    }
-  }
-})();
 
 // Modal backdrop + ESC key handlers
 document.getElementById('confirmModal').addEventListener('click', function(e) { if (e.target === this) closeConfirmModal(); });
