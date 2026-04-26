@@ -164,6 +164,7 @@ header h1{font-size:1.15rem;font-weight:600}
         <input type="checkbox" id="pinRemember"> Beni hatırla
       </label>
       <button onclick="checkPin()" style="width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">Giriş</button>
+      <button onclick="showRecovery()" style="width:100%;margin-top:10px;padding:8px;background:none;border:none;color:#5f6368;font-size:.8rem;cursor:pointer;text-decoration:underline">PIN'imi unuttum</button>
     </div>
 
     <!-- Yeni cihaz kurulum (token yoksa) -->
@@ -366,6 +367,45 @@ header h1{font-size:1.15rem;font-weight:600}
     <div style="display:flex;gap:10px">
       <button onclick="closeAdminKeyModal()" style="flex:1;padding:12px;border:1.5px solid #dadce0;border-radius:10px;background:#fff;font-size:.95rem;font-weight:600;cursor:pointer;color:#5f6368">İptal</button>
       <button onclick="submitAdminKeyModal()" style="flex:1;padding:12px;border:none;border-radius:10px;background:#1a73e8;color:#fff;font-size:.95rem;font-weight:600;cursor:pointer">Doğrula</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kurtarma Modali -->
+<div id="recoveryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:1.8rem">🔑</div>
+      <div style="font-weight:700;font-size:1rem;color:#202124;margin-top:6px">Erişim Kurtarma</div>
+      <div style="font-size:.82rem;color:#5f6368;margin-top:4px">GitHub'dan yeni bir token üret (gist yetkisi), aşağıya gir.</div>
+    </div>
+    <div id="recoveryStep1">
+      <div style="font-size:.78rem;font-weight:600;color:#5f6368;margin-bottom:4px">GitHub Personal Access Token</div>
+      <input type="password" id="recoveryToken" placeholder="ghp_xxxxxxxxxxxx"
+        style="width:100%;padding:10px;border:1.5px solid #dadce0;border-radius:8px;font-size:.85rem;font-family:monospace;outline:none;margin-bottom:8px"
+        onkeydown="if(event.key==='Enter')verifyRecoveryToken()">
+      <div id="recoveryTokenError" style="color:#d93025;font-size:.78rem;min-height:16px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeRecovery()" style="flex:1;padding:10px;border:1.5px solid #dadce0;border-radius:8px;background:#fff;font-size:.88rem;font-weight:600;cursor:pointer;color:#5f6368">İptal</button>
+        <button onclick="verifyRecoveryToken()" id="recoveryVerifyBtn" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1a73e8;color:#fff;font-size:.88rem;font-weight:600;cursor:pointer">Doğrula</button>
+      </div>
+    </div>
+    <div id="recoveryStep2" style="display:none">
+      <div style="background:#e8f5e9;border-radius:8px;padding:8px 12px;font-size:.8rem;color:#2e7d32;margin-bottom:14px">✓ GitHub kimliği doğrulandı</div>
+      <div style="font-size:.78rem;font-weight:600;color:#5f6368;margin-bottom:4px">Yeni PIN</div>
+      <input type="password" id="recoveryNewPin" placeholder="En az 4 karakter" inputmode="numeric"
+        style="width:100%;padding:10px;border:1.5px solid #dadce0;border-radius:8px;font-size:1rem;text-align:center;letter-spacing:4px;outline:none;margin-bottom:8px">
+      <div style="font-size:.78rem;font-weight:600;color:#5f6368;margin-bottom:4px">Yeni PIN (tekrar)</div>
+      <input type="password" id="recoveryNewPinConfirm" placeholder="PIN'i tekrar girin" inputmode="numeric"
+        style="width:100%;padding:10px;border:1.5px solid #dadce0;border-radius:8px;font-size:1rem;text-align:center;letter-spacing:4px;outline:none;margin-bottom:8px">
+      <div style="font-size:.78rem;font-weight:600;color:#5f6368;margin-bottom:4px">Yeni Admin Key <span style="font-weight:400">(boş bırakılabilir)</span></div>
+      <input type="password" id="recoveryNewKey" placeholder="Opsiyonel"
+        style="width:100%;padding:10px;border:1.5px solid #dadce0;border-radius:8px;font-size:.95rem;letter-spacing:3px;outline:none;margin-bottom:8px">
+      <div id="recoverySetError" style="color:#d93025;font-size:.78rem;min-height:16px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeRecovery()" style="flex:1;padding:10px;border:1.5px solid #dadce0;border-radius:8px;background:#fff;font-size:.88rem;font-weight:600;cursor:pointer;color:#5f6368">İptal</button>
+        <button onclick="doRecovery()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1e8e3e;color:#fff;font-size:.88rem;font-weight:600;cursor:pointer">Kaydet ve Giriş</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2032,9 +2072,114 @@ async function openAdminPanel() {
 
 function closeAdminPanel() {
   document.getElementById('adminOverlay').style.display = 'none';
-  // Admin key inputunu temizle
   const inp = document.getElementById('adminKeySettingsInput');
   if (inp) inp.value = '';
+}
+
+// ============ KURTARMA MEKANİZMASI ============
+let _recoveryGistId = null;
+let _recoveryToken = null;
+
+function showRecovery() {
+  _recoveryGistId = null;
+  _recoveryToken = null;
+  document.getElementById('recoveryToken').value = '';
+  document.getElementById('recoveryTokenError').textContent = '';
+  document.getElementById('recoveryNewPin').value = '';
+  document.getElementById('recoveryNewPinConfirm').value = '';
+  document.getElementById('recoveryNewKey').value = '';
+  document.getElementById('recoverySetError').textContent = '';
+  document.getElementById('recoveryStep1').style.display = 'block';
+  document.getElementById('recoveryStep2').style.display = 'none';
+  document.getElementById('recoveryModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('recoveryToken').focus(), 100);
+}
+
+function closeRecovery() {
+  document.getElementById('recoveryModal').style.display = 'none';
+  _recoveryGistId = null;
+  _recoveryToken = null;
+}
+
+async function verifyRecoveryToken() {
+  const token = document.getElementById('recoveryToken').value.trim();
+  const errEl = document.getElementById('recoveryTokenError');
+  const btn = document.getElementById('recoveryVerifyBtn');
+  errEl.textContent = '';
+  if (!token) { errEl.textContent = 'Token girin.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Doğrulanıyor...';
+  try {
+    const headers = { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' };
+    // Token'ın gist yetkisi var mı ve CAM-O Gist'i buluyor mu?
+    let page = 1, foundId = null;
+    while (page <= 5 && !foundId) {
+      const res = await fetch(`https://api.github.com/gists?per_page=100&page=${page}`, { headers });
+      if (!res.ok) throw new Error('Token geçersiz veya gist yetkisi yok.');
+      const list = await res.json();
+      if (!list.length) break;
+      const found = list.find(g => g.files && g.files[GIST_FILENAME]);
+      if (found) { foundId = found.id; break; }
+      page++;
+    }
+    if (!foundId) throw new Error('Bu token ile bağlı CAM-O Gist\'i bulunamadı.');
+    _recoveryGistId = foundId;
+    _recoveryToken = token;
+    // Adım 2'ye geç
+    document.getElementById('recoveryStep1').style.display = 'none';
+    document.getElementById('recoveryStep2').style.display = 'block';
+    setTimeout(() => document.getElementById('recoveryNewPin').focus(), 100);
+  } catch(e) {
+    errEl.textContent = e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Doğrula';
+}
+
+async function doRecovery() {
+  const newPin = document.getElementById('recoveryNewPin').value;
+  const confirmPin = document.getElementById('recoveryNewPinConfirm').value;
+  const newKey = document.getElementById('recoveryNewKey').value;
+  const errEl = document.getElementById('recoverySetError');
+  errEl.textContent = '';
+
+  if (!newPin) { errEl.textContent = 'Yeni PIN girin.'; return; }
+  if (newPin.length < 4) { errEl.textContent = 'PIN en az 4 karakter olmalı.'; return; }
+  if (newPin !== confirmPin) { errEl.textContent = 'PINler eşleşmiyor.'; return; }
+
+  await storePin(newPin);
+  if (newKey) await storeAdminKey(newKey);
+
+  const hashedPin = getStoredPin();
+  const hashedKey = getStoredAdminKey();
+
+  // Gist'e yeni hash'leri yaz
+  try {
+    const headers = { Authorization: `token ${_recoveryToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' };
+    const gRes = await fetch(`https://api.github.com/gists/${_recoveryGistId}`, { headers });
+    if (gRes.ok) {
+      const gData = await gRes.json();
+      const file = gData.files[GIST_FILENAME];
+      const content = file ? JSON.parse(file.content) : {};
+      content.pin = hashedPin;
+      if (newKey) content.adminKey = hashedKey;
+      await fetch(`https://api.github.com/gists/${_recoveryGistId}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(content, null, 2) } } })
+      });
+    }
+  } catch(e) { /* Gist yazılamazsa yerel kayıt yeterli */ }
+
+  // Token'ı ve Gist ID'yi güncelle
+  localStorage.setItem('camGhToken', _recoveryToken);
+  localStorage.setItem('camGistId', _recoveryGistId);
+
+  // Oturum aç
+  localStorage.setItem('camAuth', hashedPin);
+  closeRecovery();
+  document.getElementById('pinOverlay').style.display = 'none';
+  showToast('Erişim kurtarıldı! Hoş geldiniz.', 'success');
 }
 
 function isAdminSessionValid() {
@@ -2153,8 +2298,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('confirmModal').style.display === 'flex') closeConfirmModal();
     if (document.getElementById('adminKeyModal').style.display === 'flex') closeAdminKeyModal();
+    if (document.getElementById('recoveryModal').style.display === 'flex') closeRecovery();
   }
 });
+document.getElementById('recoveryModal').addEventListener('click', function(e) { if (e.target === this) closeRecovery(); });
 
 // Baglanti geri gelince bekleyen degisiklikleri gonder
 window.addEventListener('online', syncPendingChanges);
