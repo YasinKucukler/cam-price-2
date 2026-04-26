@@ -827,7 +827,7 @@ function connectServerSSE() {
     renderHistory();
     showToast('Projeler guncellendi', 'info');
   });
-  es.addEventListener('pin', (e) => {
+  es.addEventListener('pin', async (e) => {
     const data = JSON.parse(e.data);
     if (data.pin) await storePin(data.pin);
   });
@@ -838,30 +838,35 @@ function connectServerSSE() {
 }
 
 async function startup() {
-  // Eski base64 kayıtları SHA-256'ya yükselt
-  await migrateCredentials();
-  // Varsayılan PIN/key (ilk kurulum — Gist'e bağlanınca yayılır)
-  if (!getStoredPin()) await storePin('9876543210');
-  if (!getStoredAdminKey()) await storeAdminKey('2024');
-  // Oturum kontrolü
-  const currentPin = getStoredPin();
-  const savedAuth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
-  if (savedAuth && currentPin && savedAuth !== currentPin) {
-    localStorage.removeItem('camAuth');
-    sessionStorage.removeItem('camAuth');
-  }
-  const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
-  if (!auth) {
-    document.getElementById('pinOverlay').style.display = 'flex';
-    if (!currentPin) {
-      document.getElementById('pinSection').style.display = 'none';
-      document.getElementById('pinSetupSection').style.display = 'block';
-      setTimeout(() => document.getElementById('setupToken').focus(), 100);
-    } else {
-      setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  try {
+    // Eski base64 kayıtları SHA-256'ya yükselt
+    await migrateCredentials();
+    // Varsayılan PIN/key (ilk kurulum — Gist'e bağlanınca yayılır)
+    if (!getStoredPin()) await storePin('9876543210');
+    if (!getStoredAdminKey()) await storeAdminKey('2024');
+    // Oturum kontrolü
+    const currentPin = getStoredPin();
+    const savedAuth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+    if (savedAuth && currentPin && savedAuth !== currentPin) {
+      localStorage.removeItem('camAuth');
+      sessionStorage.removeItem('camAuth');
     }
+    const auth = localStorage.getItem('camAuth') || sessionStorage.getItem('camAuth');
+    if (!auth) {
+      document.getElementById('pinOverlay').style.display = 'flex';
+      if (!currentPin) {
+        document.getElementById('pinSection').style.display = 'none';
+        document.getElementById('pinSetupSection').style.display = 'block';
+        setTimeout(() => document.getElementById('setupToken').focus(), 100);
+      } else {
+        setTimeout(() => document.getElementById('pinInput').focus(), 100);
+      }
+    }
+  } catch(e) {
+    console.error('startup hatası:', e);
+  } finally {
+    initApp();
   }
-  initApp();
 }
 startup();
 
