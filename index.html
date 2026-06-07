@@ -359,6 +359,17 @@ header h1{font-size:1.15rem;font-weight:600}
   </div>
 </div>
 
+<!-- Civata Secim Modal -->
+<div id="civataChoiceModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:24px 20px;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <div style="font-size:1.3rem;margin-bottom:8px">🔩</div>
+    <div style="font-weight:700;font-size:1rem;margin-bottom:6px;color:#202124">Civata Türü Seç</div>
+    <div style="font-size:.82rem;color:#5f6368;margin-bottom:16px">Kamera başına 10 adet hangi civata eklensin?</div>
+    <div style="display:flex;gap:8px;flex-direction:column" id="civataChoiceBtns"></div>
+    <button onclick="closeCivataChoice()" style="margin-top:10px;width:100%;padding:10px;border:1.5px solid #dadce0;border-radius:10px;background:#fff;font-size:.88rem;font-weight:600;cursor:pointer;color:#5f6368">Ekleme</button>
+  </div>
+</div>
+
 <!-- Admin Key Modal -->
 <div id="adminKeyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18)">
@@ -564,6 +575,21 @@ const DEFAULT_CATALOG = [
 // ============ AUTO-LINK RULES ============
 // Bir ürün eklendiğinde otomatik olarak başka ürünler de eklenir
 const AUTO_LINK_RULES = [
+  {
+    triggers: ['kam1','kamHikDs2','kamTapo','kamDahuaBullet','kamHikIp','kamHikH265',
+               'kamHik4mp50','kamHikHaikon4mp','kamHik8mp4k','kamDahuaPtz5mp',
+               'kamHik4mp4mm','kamHik4mp28mm','kamExtraBox'],
+    links: [
+      { id: 'rj45k', qtyPerUnit: 5 }
+    ],
+    choice: {
+      options: [
+        { id: 'cvAkl', label: 'Akıllı Civata', qtyPerUnit: 10 },
+        { id: 'cv8',   label: "8'lik Civata",  qtyPerUnit: 10 }
+      ]
+    },
+    message: 'Kamera için 5 RJ45 kılıflı eklendi'
+  },
   {
     triggers: ['kanal12','kanal16','kanal25','kanal32','kanal50'],
     links: [
@@ -1152,6 +1178,51 @@ function applyAutoLinks(productId, triggerQty) {
   });
   _autoLinkRunning = false;
   showToast(rule.message, 'success');
+  if (rule.choice) showCivataChoice(rule.choice.options, triggerQty);
+}
+
+// ============ CIVATA SECIM MODAL ============
+let _civataChoiceQty = 1;
+function showCivataChoice(options, triggerQty) {
+  _civataChoiceQty = triggerQty;
+  const btns = document.getElementById('civataChoiceBtns');
+  btns.innerHTML = options.map(opt => {
+    const p = getProduct(opt.id);
+    const qty = opt.qtyPerUnit * triggerQty;
+    const total = p ? fmtMoney(p.price * qty) : '';
+    return `<button onclick="applyCivataChoice('${opt.id}',${opt.qtyPerUnit})"
+      style="width:100%;padding:12px;border:1.5px solid #dadce0;border-radius:10px;background:#f8f9fa;
+             font-size:.9rem;font-weight:600;cursor:pointer;color:#202124;text-align:left;display:flex;justify-content:space-between;align-items:center">
+      <span>${opt.label} <span style="font-size:.75rem;color:#5f6368;font-weight:400">(${qty} adet)</span></span>
+      <span style="color:#1a73e8;font-size:.82rem">${total}</span>
+    </button>`;
+  }).join('');
+  document.getElementById('civataChoiceModal').style.display = 'flex';
+}
+function closeCivataChoice() {
+  document.getElementById('civataChoiceModal').style.display = 'none';
+}
+function applyCivataChoice(productId, qtyPerUnit) {
+  closeCivataChoice();
+  const p = getProduct(productId);
+  if (!p) return;
+  const autoQty = qtyPerUnit * _civataChoiceQty;
+  const existing = materials.find(m => m.productId === productId);
+  if (existing) {
+    existing.qty = Math.round((existing.qty + autoQty) * 1000) / 1000;
+  } else {
+    materials.unshift({
+      uid: Date.now() + Math.random(),
+      productId: p.id,
+      name: p.group + ' - ' + p.name,
+      qty: autoQty,
+      price: p.price,
+      priceMax: p.priceMax || null
+    });
+  }
+  renderProductGroups();
+  calculate();
+  showToast(p.name + ' (' + autoQty + ' adet) eklendi', 'success');
 }
 
 // ============ MATERIAL LIST MODAL ============
@@ -1259,12 +1330,13 @@ function updateOfferSuggestions(cost, currentOffer) {
   if (cost <= 0) { wrap.style.display = 'none'; return; }
   wrap.style.display = 'block';
 
-  // 3 hedef kar marjı: %20, %30, %40
-  const targets = [
-    { label: '%20 Kar', margin: 0.20, color: '#5f6368', bg: '#f1f3f4' },
-    { label: '%30 Kar', margin: 0.30, color: '#1e8e3e', bg: '#e6f4ea' },
-    { label: '%40 Kar', margin: 0.40, color: '#1a73e8', bg: '#e8f0fe' },
-  ];
+  // Kullanıcı henüz fiyat girmediyse %12 pazarlık payını otomatik uygula
+  const defaultBuffer = 0.12;
+  if (!currentOffer) {
+    const defaultPrice = Math.round((cost / (1 - 0.30)) * (1 + defaultBuffer) / 50) * 50;
+    document.getElementById('offerPrice').value = defaultPrice;
+    currentOffer = defaultPrice;
+  }
 
   // Pazarlık önerileri: %30 hedef + pazarlık payı (müşteri indirince hâlâ karda kal)
   const pazarlik = [
@@ -1287,12 +1359,6 @@ function updateOfferSuggestions(cost, currentOffer) {
       ${t.desc ? `<div style="font-size:.62rem;opacity:.75">${t.desc}</div>` : ''}
     </button>`;
 
-  const karBtns = targets.map(t => {
-    const suggested = cost / (1 - t.margin);
-    const rounded = Math.ceil(suggested / 50) * 50;
-    return renderBtn(t, currentOffer === rounded, rounded, rounded - cost);
-  }).join('');
-
   // Pazarlık fiyatı: hedef karı buffer ile yukarı taşı, sonra en yakın 50'ye yuvarla
   const pazBtns = pazarlik.map(t => {
     const targetPrice = cost / (1 - t.margin);
@@ -1301,10 +1367,7 @@ function updateOfferSuggestions(cost, currentOffer) {
     return renderBtn(t, currentOffer === rounded, rounded, rounded - cost);
   }).join('');
 
-  btns.innerHTML =
-    karBtns +
-    `<div style="width:100%;font-size:.7rem;color:var(--text2);margin:6px 0 4px;font-weight:600">Pazarlık Önerileri:</div>` +
-    pazBtns;
+  btns.innerHTML = pazBtns;
 }
 
 function applyOffer(price) {
@@ -2435,6 +2498,7 @@ async function setupFromToken() {
 // Modal backdrop + ESC key handlers
 document.getElementById('confirmModal').addEventListener('click', function(e) { if (e.target === this) closeConfirmModal(); });
 document.getElementById('adminKeyModal').addEventListener('click', function(e) { if (e.target === this) closeAdminKeyModal(); });
+document.getElementById('civataChoiceModal').addEventListener('click', function(e) { if (e.target === this) closeCivataChoice(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('confirmModal').style.display === 'flex') closeConfirmModal();
