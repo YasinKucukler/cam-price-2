@@ -584,8 +584,10 @@ const AUTO_LINK_RULES = [
     ],
     choice: {
       options: [
-        { id: 'cvAkl', label: 'Akıllı Civata', qtyPerUnit: 10 },
-        { id: 'cv8',   label: "8'lik Civata",  qtyPerUnit: 10 }
+        { id: 'cvAkl', label: 'Akıllı Civata',  qtyPerUnit: 10 },
+        { id: 'cv8',   label: "8'lik Civata",   qtyPerUnit: 10 },
+        { id: 'cv10',  label: "10'luk Civata",  qtyPerUnit: 10 },
+        { id: 'cv12',  label: "12'lik Civata",  qtyPerUnit: 10 }
       ]
     },
     message: 'Kamera için 5 RJ45 kılıflı eklendi'
@@ -607,6 +609,7 @@ const AUTO_LINK_RULES = [
   }
 ];
 let _autoLinkRunning = false; // sonsuz döngüyü önler
+let _lastCableThreshold = 0;  // 200 metre kablo eşik sayacı
 
 const LABOR_RATE = 0.30;
 const LABOR_MIN = 4000;
@@ -1151,6 +1154,7 @@ function addProductWithQty(productId) {
     showToast(p.name + ' eklendi!', 'success');
   }
   applyAutoLinks(productId, qty);
+  if (p.group === 'Kablo' && p.name.includes('(mt)')) checkCableThreshold();
   renderProductGroups();
   calculate();
 }
@@ -1181,6 +1185,42 @@ function applyAutoLinks(productId, triggerQty) {
   _autoLinkRunning = false;
   showToast(rule.message, 'success');
   if (rule.choice) showCivataChoice(rule.choice.options, triggerQty);
+}
+
+// ============ KABLO EŞİK KONTROLÜ ============
+function checkCableThreshold() {
+  const totalMeters = materials
+    .filter(m => {
+      const p = getProduct(m.productId);
+      return p && p.group === 'Kablo' && p.name.includes('(mt)');
+    })
+    .reduce((sum, m) => sum + m.qty, 0);
+
+  const newThreshold = Math.floor(totalMeters / 200);
+  const diff = newThreshold - _lastCableThreshold;
+  if (diff <= 0) return;
+
+  _lastCableThreshold = newThreshold;
+  ['bant', 'kelepce'].forEach(id => {
+    const p = getProduct(id);
+    if (!p) return;
+    const existing = materials.find(m => m.productId === id);
+    if (existing) {
+      existing.qty = Math.round((existing.qty + diff) * 1000) / 1000;
+    } else {
+      materials.unshift({
+        uid: Date.now() + Math.random(),
+        productId: p.id,
+        name: p.group + ' - ' + p.name,
+        qty: diff,
+        price: p.price,
+        priceMax: p.priceMax || null
+      });
+    }
+  });
+  showToast(`${totalMeters} mt kablo → ${diff} bant ve ${diff} kelepçe eklendi`, 'success');
+  renderProductGroups();
+  calculate();
 }
 
 // ============ CIVATA SECIM MODAL ============
@@ -1222,12 +1262,14 @@ function applyCivataChoice(productId, qtyPerUnit) {
       priceMax: p.priceMax || null
     });
   }
-  // 8'lik civata seçilince otomatik 10 adet dübel ekle (kamera başına)
-  if (productId === 'cv8') {
+  // Civata → eşleşen dübel otomatik ekle
+  const dubMap = { cv8: 'dub8', cv10: 'dub10', cv12: 'dub12' };
+  const dubId = dubMap[productId];
+  if (dubId) {
     const dubQty = 10 * _civataChoiceQty;
-    const dub = getProduct('dub8');
+    const dub = getProduct(dubId);
     if (dub) {
-      const existingDub = materials.find(m => m.productId === 'dub8');
+      const existingDub = materials.find(m => m.productId === dubId);
       if (existingDub) {
         existingDub.qty = Math.round((existingDub.qty + dubQty) * 1000) / 1000;
       } else {
@@ -1240,7 +1282,7 @@ function applyCivataChoice(productId, qtyPerUnit) {
           priceMax: dub.priceMax || null
         });
       }
-      showToast(p.name + ' + 8\'lik Dübel (' + dubQty + ' adet) eklendi', 'success');
+      showToast(p.name + ' + ' + dub.name + ' (' + dubQty + ' adet) eklendi', 'success');
     }
   } else {
     showToast(p.name + ' (' + autoQty + ' adet) eklendi', 'success');
@@ -1457,6 +1499,7 @@ function resetForm() {
   document.getElementById('projectNote').value = '';
   document.getElementById('offerPrice').value = '';
   materials = [];
+  _lastCableThreshold = 0;
   addDefaultItems();
 
   renderProductGroups();
