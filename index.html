@@ -998,7 +998,7 @@ function renderProductGroups() {
     return;
   }
 
-  const ESSENTIAL_GROUPS = ['Kamera','NVR / DVR','Depolama','Kablo','Civata','PoE Switch'];
+  const ESSENTIAL_GROUPS = ['Kamera','NVR / DVR','Depolama','Kablo','Civata','PoE Switch','Konnektor'];
 
   Object.keys(groups).forEach(g => {
     const count = counts[g] || 0;
@@ -1006,7 +1006,7 @@ function renderProductGroups() {
     const safeName = g.replace(/'/g, "\\'");
     const isEssential = ESSENTIAL_GROUPS.includes(g) && count === 0;
     const essentialBadge = isEssential
-      ? `<span style="background:#f9ab00;color:#fff;border-radius:10px;padding:1px 6px;font-size:.62rem;margin-left:4px;font-weight:700;animation:pulse-badge 1.5s infinite">Önerilen</span>`
+      ? `<span style="background:#f9ab00;color:#fff;border-radius:50%;width:10px;height:10px;display:inline-block;margin-left:6px;animation:pulse-badge 1.5s infinite;vertical-align:middle"></span>`
       : '';
     html += `<button class="group-btn${isOpen ? ' open' : ''}${isEssential ? ' essential-group' : ''}" onclick="toggleGroup('${safeName}')">
       ${esc(g)}${count > 0 ? ` <span style="background:${isOpen ? 'rgba(255,255,255,.9)' : '#1a73e8'};color:${isOpen ? '#1a73e8' : '#fff'};border-radius:50%;padding:1px 6px;font-size:.68rem;margin-left:2px;font-weight:700">${count}</span>` : essentialBadge}
@@ -1220,9 +1220,31 @@ function applyCivataChoice(productId, qtyPerUnit) {
       priceMax: p.priceMax || null
     });
   }
+  // 8'lik civata seçilince otomatik 10 adet dübel ekle (kamera başına)
+  if (productId === 'cv8') {
+    const dubQty = 10 * _civataChoiceQty;
+    const dub = getProduct('dub8');
+    if (dub) {
+      const existingDub = materials.find(m => m.productId === 'dub8');
+      if (existingDub) {
+        existingDub.qty = Math.round((existingDub.qty + dubQty) * 1000) / 1000;
+      } else {
+        materials.unshift({
+          uid: Date.now() + Math.random(),
+          productId: dub.id,
+          name: dub.group + ' - ' + dub.name,
+          qty: dubQty,
+          price: dub.price,
+          priceMax: dub.priceMax || null
+        });
+      }
+      showToast(p.name + ' + 8\'lik Dübel (' + dubQty + ' adet) eklendi', 'success');
+    }
+  } else {
+    showToast(p.name + ' (' + autoQty + ' adet) eklendi', 'success');
+  }
   renderProductGroups();
   calculate();
-  showToast(p.name + ' (' + autoQty + ' adet) eklendi', 'success');
 }
 
 // ============ MATERIAL LIST MODAL ============
@@ -1348,16 +1370,20 @@ function updateOfferSuggestions(cost, currentOffer) {
     { label: '~%30 Hedef', desc: '(%25 pay)', margin: 0.30, buffer: 0.25, color: '#c5221f', bg: '#fce8e6' },
   ];
 
-  const renderBtn = (t, isActive, rounded, profit) =>
-    `<button onclick="applyOffer(${rounded})"
-      style="flex:1;min-width:80px;padding:7px 6px;border-radius:8px;border:2px solid ${isActive ? t.color : 'transparent'};
-             background:${isActive ? t.color : t.bg};color:${isActive ? '#fff' : t.color};
+  const renderBtn = (t, isActive, rounded, profit) => {
+    const bg    = isActive ? '#e37400' : '#e8f0fe';
+    const color = isActive ? '#fff'    : '#1a73e8';
+    const border = isActive ? '#e37400' : '#c5d9f7';
+    return `<button onclick="applyOffer(${rounded})"
+      style="flex:1;min-width:80px;padding:7px 6px;border-radius:8px;border:2px solid ${border};
+             background:${bg};color:${color};
              font-size:.75rem;font-weight:700;cursor:pointer;line-height:1.4;text-align:center">
       <div>${t.label}</div>
       <div style="font-size:.8rem">${fmtMoney(rounded)}</div>
       <div style="font-size:.68rem;opacity:.85">+${fmtMoney(profit)}</div>
       ${t.desc ? `<div style="font-size:.62rem;opacity:.75">${t.desc}</div>` : ''}
     </button>`;
+  };
 
   // Pazarlık fiyatı: hedef karı buffer ile yukarı taşı, sonra en yakın 50'ye yuvarla
   const pazBtns = pazarlik.map(t => {
