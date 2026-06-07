@@ -2566,6 +2566,11 @@ async function setupFromToken() {
 document.getElementById('confirmModal').addEventListener('click', function(e) { if (e.target === this) closeConfirmModal(); });
 document.getElementById('adminKeyModal').addEventListener('click', function(e) { if (e.target === this) closeAdminKeyModal(); });
 document.getElementById('civataChoiceModal').addEventListener('click', function(e) { if (e.target === this) closeCivataChoice(); });
+// Sayı inputlarına tıklayınca içerik otomatik seçilir (üzerine yazılır)
+document.addEventListener('focus', e => {
+  if (e.target.type === 'number') e.target.select();
+}, true);
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('confirmModal').style.display === 'flex') closeConfirmModal();
