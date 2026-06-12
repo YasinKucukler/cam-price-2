@@ -264,7 +264,7 @@ header h1{font-size:1.15rem;font-weight:600}
       <div class="card-title">Musteriye Teklif Fiyati</div>
       <div class="form-group">
         <label>Toplam Teklif Fiyati (TL)</label>
-        <input type="number" id="offerPrice" placeholder="0" oninput="calculate()" min="0">
+        <input type="number" id="offerPrice" placeholder="0" oninput="_offerTouched=true;calculate()" min="0">
       </div>
       <div id="offerSuggestions" style="display:none">
         <div style="font-size:.75rem;color:var(--text2);margin-bottom:6px;font-weight:500">Öneri (tıklayarak uygula):</div>
@@ -610,6 +610,7 @@ const AUTO_LINK_RULES = [
 ];
 let _autoLinkRunning = false; // sonsuz döngüyü önler
 let _lastCableThreshold = 0;  // 200 metre kablo eşik sayacı
+let _offerTouched = false;    // kullanıcı teklif alanına elle değer girdiyse true
 
 const LABOR_RATE = 0.30;
 const LABOR_MIN = 4000;
@@ -1398,20 +1399,20 @@ function updateOfferSuggestions(cost, currentOffer) {
 
   // Kullanıcı henüz fiyat girmediyse %12 pazarlık payını otomatik uygula
   const defaultBuffer = 0.12;
-  if (!currentOffer) {
-    const defaultPrice = Math.round((cost / (1 - 0.30)) * (1 + defaultBuffer) / 50) * 50;
+  if (!currentOffer && !_offerTouched) {
+    const defaultPrice = Math.round(cost * (1 + defaultBuffer) / 50) * 50;
     document.getElementById('offerPrice').value = defaultPrice;
     currentOffer = defaultPrice;
   }
 
-  // Pazarlık önerileri: %30 hedef + pazarlık payı (müşteri indirince hâlâ karda kal)
+  // Pazarlık önerileri: maliyet × (1 + pay oranı)
   const pazarlik = [
-    { label: '~%30 Hedef', desc: '(%10 pay)', margin: 0.30, buffer: 0.10, color: '#e37400', bg: '#fef3e2' },
-    { label: '~%30 Hedef', desc: '(%12 pay)', margin: 0.30, buffer: 0.12, color: '#e37400', bg: '#fef3e2' },
-    { label: '~%30 Hedef', desc: '(%15 pay)', margin: 0.30, buffer: 0.15, color: '#e37400', bg: '#fef3e2' },
-    { label: '~%30 Hedef', desc: '(%18 pay)', margin: 0.30, buffer: 0.18, color: '#c5221f', bg: '#fce8e6' },
-    { label: '~%30 Hedef', desc: '(%20 pay)', margin: 0.30, buffer: 0.20, color: '#c5221f', bg: '#fce8e6' },
-    { label: '~%30 Hedef', desc: '(%25 pay)', margin: 0.30, buffer: 0.25, color: '#c5221f', bg: '#fce8e6' },
+    { label: '+%10', desc: 'pazarlık payı', buffer: 0.10, color: '#e37400', bg: '#fef3e2' },
+    { label: '+%12', desc: 'pazarlık payı', buffer: 0.12, color: '#e37400', bg: '#fef3e2' },
+    { label: '+%15', desc: 'pazarlık payı', buffer: 0.15, color: '#e37400', bg: '#fef3e2' },
+    { label: '+%18', desc: 'pazarlık payı', buffer: 0.18, color: '#c5221f', bg: '#fce8e6' },
+    { label: '+%20', desc: 'pazarlık payı', buffer: 0.20, color: '#c5221f', bg: '#fce8e6' },
+    { label: '+%25', desc: 'pazarlık payı', buffer: 0.25, color: '#c5221f', bg: '#fce8e6' },
   ];
 
   const renderBtn = (t, isActive, rounded, profit) =>
@@ -1425,11 +1426,9 @@ function updateOfferSuggestions(cost, currentOffer) {
       ${t.desc ? `<div style="font-size:.62rem;opacity:.75">${t.desc}</div>` : ''}
     </button>`;
 
-  // Pazarlık fiyatı: hedef karı buffer ile yukarı taşı, sonra en yakın 50'ye yuvarla
+  // Pazarlık fiyatı: maliyet × (1 + pay oranı), en yakın 50 TL'ye yuvarla
   const pazBtns = pazarlik.map(t => {
-    const targetPrice = cost / (1 - t.margin);
-    const suggested = targetPrice * (1 + t.buffer);
-    const rounded = Math.round(suggested / 50) * 50;
+    const rounded = Math.round(cost * (1 + t.buffer) / 50) * 50;
     return renderBtn(t, currentOffer === rounded, rounded, rounded - cost);
   }).join('');
 
@@ -1500,6 +1499,7 @@ function resetForm() {
   document.getElementById('offerPrice').value = '';
   materials = [];
   _lastCableThreshold = 0;
+  _offerTouched = false;
   addDefaultItems();
 
   renderProductGroups();
