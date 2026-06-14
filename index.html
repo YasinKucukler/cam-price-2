@@ -681,6 +681,12 @@ function getCatalog() {
   return catalog;
 }
 
+function mergeMissingDefaults(cat) {
+  const ids = new Set(cat.map(p => p.id));
+  DEFAULT_CATALOG.forEach(p => { if (!ids.has(p.id)) cat.push({...p}); });
+  return cat;
+}
+
 function saveCatalog(cat) {
   catalog = cat; // sadece memory, localStorage'a yazmaz
   _catalogDirty = true;
@@ -784,7 +790,7 @@ async function initApp() {
   // Once cache'den yukle (ani gosterim icin)
   const cachedCatalog = localStorage.getItem('camCatalog_cache');
   const cachedProjects = localStorage.getItem('camProjects_cache');
-  if (cachedCatalog) catalog = JSON.parse(cachedCatalog);
+  if (cachedCatalog) catalog = mergeMissingDefaults(JSON.parse(cachedCatalog));
   if (cachedProjects) projects = JSON.parse(cachedProjects);
 
   document.getElementById('projectDate').value = new Date().toISOString().split('T')[0];
@@ -806,7 +812,7 @@ async function initApp() {
       const serverCatalog = await catRes.json();
       const serverProjects = await projRes.json();
       const serverPin = await pinRes.json();
-      if (serverCatalog) { catalog = serverCatalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
+      if (serverCatalog) { catalog = mergeMissingDefaults(serverCatalog); localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
       if (serverProjects) { projects = serverProjects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
       if (serverPin.pin) await storePin(serverPin.pin);
       if (materials.length === 0) addDefaultItems();
@@ -891,7 +897,7 @@ function connectServerSSE() {
   const es = new EventSource('/api/events?clientId=' + CLIENT_ID);
   es.addEventListener('catalog', (e) => {
     const data = JSON.parse(e.data);
-    catalog = data;
+    catalog = mergeMissingDefaults(data);
     localStorage.setItem('camCatalog_cache', JSON.stringify(catalog));
     renderProductGroups();
     renderPriceEditor();
@@ -1903,7 +1909,7 @@ async function syncFromGist() {
     const content = JSON.parse(file.content);
     console.log('[SYNC] Gist ID:', gistId, '| updatedAt:', content.updatedAt, '| updatedBy:', content.updatedBy);
     if (content.projects) { projects = content.projects; localStorage.setItem('camProjects_cache', JSON.stringify(projects)); }
-    if (content.catalog) { catalog = content.catalog; localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
+    if (content.catalog) { catalog = mergeMissingDefaults(content.catalog); localStorage.setItem('camCatalog_cache', JSON.stringify(catalog)); }
     if (content.pin) await storePin(content.pin);
     if (content.adminKey) await storeAdminKey(content.adminKey);
     // Uzaktan sifirlama komutu kontrol et
@@ -2551,7 +2557,7 @@ async function setupFromToken() {
     const content = JSON.parse(gData.files[GIST_FILENAME].content);
     if (content.pin) await storePin(content.pin);
     if (content.projects) localStorage.setItem('camProjects_cache', JSON.stringify(content.projects));
-    if (content.catalog) localStorage.setItem('camCatalog_cache', JSON.stringify(content.catalog));
+    if (content.catalog) localStorage.setItem('camCatalog_cache', JSON.stringify(mergeMissingDefaults(content.catalog)));
     // PIN ekranına geç
     document.getElementById('pinSetupSection').style.display = 'none';
     document.getElementById('pinSection').style.display = 'block';
