@@ -611,6 +611,7 @@ const AUTO_LINK_RULES = [
 let _autoLinkRunning = false; // sonsuz döngüyü önler
 let _lastCableThreshold = 0;  // 200 metre kablo eşik sayacı
 let _offerTouched = false;    // kullanıcı teklif alanına elle değer girdiyse true
+let _selectedBuffer = null;   // kullanıcının seçtiği pazarlık oranı (null = default %12)
 
 const LABOR_RATE = 0.30;
 const LABOR_MIN = 4000;
@@ -1377,6 +1378,14 @@ function calculate() {
   const laborCalc = matTotal * LABOR_RATE;
   const laborTotal = Math.max(laborCalc, matTotal > 0 ? LABOR_MIN : 0);
   const cost = matTotal + laborTotal;
+
+  // Kullanıcı elle değer girmediyse, seçili oran (veya default %12) üzerinden otomatik güncelle
+  if (!_offerTouched && cost > 0) {
+    const activeBuffer = _selectedBuffer !== null ? _selectedBuffer : 0.12;
+    const autoPrice = Math.round(cost * (1 + activeBuffer) / 50) * 50;
+    document.getElementById('offerPrice').value = autoPrice;
+  }
+
   const offer = parseFloat(document.getElementById('offerPrice').value) || 0;
   const profit = offer - cost;
   const margin = offer > 0 ? ((profit / offer) * 100).toFixed(1) : 0;
@@ -1403,14 +1412,6 @@ function updateOfferSuggestions(cost, currentOffer) {
   if (cost <= 0) { wrap.style.display = 'none'; return; }
   wrap.style.display = 'block';
 
-  // Kullanıcı henüz fiyat girmediyse %12 pazarlık payını otomatik uygula
-  const defaultBuffer = 0.12;
-  if (!currentOffer && !_offerTouched) {
-    const defaultPrice = Math.round(cost * (1 + defaultBuffer) / 50) * 50;
-    document.getElementById('offerPrice').value = defaultPrice;
-    currentOffer = defaultPrice;
-  }
-
   // Pazarlık önerileri: maliyet × (1 + pay oranı)
   const pazarlik = [
     { label: '+%10', desc: 'pazarlık payı', buffer: 0.10, color: '#e37400', bg: '#fef3e2' },
@@ -1422,7 +1423,7 @@ function updateOfferSuggestions(cost, currentOffer) {
   ];
 
   const renderBtn = (t, isActive, rounded, profit) =>
-    `<button onclick="applyOffer(${rounded})"
+    `<button onclick="applyOffer(${rounded}, ${t.buffer})"
       style="flex:1;min-width:80px;padding:7px 6px;border-radius:8px;border:2px solid ${isActive ? t.color : 'transparent'};
              background:${isActive ? t.color : t.bg};color:${isActive ? '#fff' : t.color};
              font-size:.75rem;font-weight:700;cursor:pointer;line-height:1.4;text-align:center">
@@ -1441,7 +1442,9 @@ function updateOfferSuggestions(cost, currentOffer) {
   btns.innerHTML = pazBtns;
 }
 
-function applyOffer(price) {
+function applyOffer(price, buffer) {
+  _selectedBuffer = buffer !== undefined ? buffer : null;
+  _offerTouched = false;
   document.getElementById('offerPrice').value = price;
   calculate();
 }
@@ -1506,6 +1509,7 @@ function resetForm() {
   materials = [];
   _lastCableThreshold = 0;
   _offerTouched = false;
+  _selectedBuffer = null;
   addDefaultItems();
 
   renderProductGroups();
