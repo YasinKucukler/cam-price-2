@@ -286,6 +286,8 @@ header h1{font-size:1.15rem;font-weight:600}
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-success" style="flex:1;min-width:45%" onclick="saveProject()">Kaydet</button>
       <button class="btn btn-primary" style="flex:1;min-width:45%" onclick="newCustomer()">Yeni Musteri</button>
+      <button class="btn btn-outline" style="flex:1;min-width:45%;background:#ff9800;color:#fff;border-color:#ff9800" onclick="printCurrent()">🖨 PDF / Yazdır</button>
+      <button class="btn btn-outline" style="flex:1;min-width:45%;background:#25d366;color:#fff;border-color:#25d366" onclick="shareCurrentWhatsApp()">💬 WhatsApp</button>
       <button class="btn btn-outline btn-block" onclick="clearMaterials()">Malzemeleri Temizle</button>
     </div>
   </div>
@@ -457,7 +459,8 @@ header h1{font-size:1.15rem;font-weight:600}
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" id="modalDeleteBtn">Sil</button>
       <button class="btn btn-primary btn-sm" onclick="loadToEditor()">Duzenle</button>
-      <button class="btn btn-outline btn-sm" onclick="printProject(viewingId)" style="background:#ff9800;color:#fff;border-color:#ff9800">🖨 Yazdır</button>
+      <button class="btn btn-outline btn-sm" onclick="printProject(viewingId)" style="background:#ff9800;color:#fff;border-color:#ff9800">🖨 PDF</button>
+      <button class="btn btn-outline btn-sm" onclick="shareWhatsApp(viewingId)" style="background:#25d366;color:#fff;border-color:#25d366">💬 WA</button>
       <button class="btn btn-outline btn-sm" onclick="closeModal()">Kapat</button>
     </div>
   </div>
@@ -2196,20 +2199,113 @@ function printProject(id) {
           <td style="padding:8px;text-align:right;color:#1a73e8">${fmtMoney(p.offer)}</td>
         </tr>
       </table>
-      <div class="no-print" style="margin-top:24px;text-align:center">
-        <button onclick="window.print()" style="padding:10px 28px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:.95rem;font-weight:600;cursor:pointer;margin-right:8px">🖨 Yazdır / PDF Kaydet</button>
-        <button onclick="document.getElementById('printView').innerHTML='';document.getElementById('detailModal').classList.add('show')" style="padding:10px 20px;background:#fff;color:#5f6368;border:1.5px solid #dadce0;border-radius:8px;font-size:.95rem;cursor:pointer">Geri Dön</button>
+      <div class="no-print" style="margin-top:24px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button onclick="window.print()" style="padding:10px 20px;background:#ff9800;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">🖨 PDF / Yazdır</button>
+        <button onclick="shareWhatsApp(${p.id})" style="padding:10px 20px;background:#25d366;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">💬 WhatsApp</button>
+        <button onclick="document.getElementById('printView').innerHTML='';document.getElementById('detailModal').classList.add('show')" style="padding:10px 20px;background:#fff;color:#5f6368;border:1.5px solid #dadce0;border-radius:8px;font-size:.9rem;cursor:pointer">← Geri</button>
       </div>
     </div>`;
   closeModal();
   window.scrollTo(0, 0);
-  // Print CSS will hide everything else and show printView
   window.print();
-  // After print dialog closes, clear print view and restore modal
   setTimeout(() => {
     pv.innerHTML = '';
     document.getElementById('detailModal').classList.add('show');
   }, 1000);
+}
+
+function buildWhatsAppText(data) {
+  const { customer, date, note, materials: mats, matTotal, laborTotal, offer } = data;
+  let lines = [];
+  lines.push('🎥 *KAMERA GÜVENLİK TEKLİFİ*');
+  lines.push('👤 Müşteri: ' + customer);
+  lines.push('📅 Tarih: ' + date);
+  if (note) lines.push('📝 Not: ' + note);
+  lines.push('');
+  lines.push('📦 *Malzeme Listesi:*');
+  (mats || []).forEach(m => {
+    lines.push('• ' + m.name + ' × ' + m.qty + ' = ' + fmtMoney(m.qty * m.price));
+  });
+  lines.push('');
+  lines.push('💰 Malzeme: ' + fmtMoney(matTotal));
+  lines.push('👷 İşçilik: ' + fmtMoney(laborTotal));
+  lines.push('─────────────────');
+  lines.push('📋 *Teklif Fiyatı: ' + fmtMoney(offer) + '*');
+  return lines.join('\n');
+}
+
+function shareWhatsApp(id) {
+  const p = projects.find(x => x.id === id || x.id === Number(id));
+  if (!p) return;
+  const text = buildWhatsAppText(p);
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+function shareCurrentWhatsApp() {
+  const fd = getFormData();
+  if (!fd.customer && fd.materials.length === 0) { showToast('Müşteri adı veya malzeme giriniz.', 'error'); return; }
+  const text = buildWhatsAppText({
+    customer: fd.customer || '—',
+    date: fd.date,
+    note: fd.note,
+    materials: fd.materials,
+    matTotal: fd.matTotal,
+    laborTotal: fd.laborTotal,
+    offer: fd.offer
+  });
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+function printCurrent() {
+  const fd = getFormData();
+  if (fd.materials.length === 0) { showToast('Malzeme listesi boş.', 'error'); return; }
+  const rows = fd.materials.map(m => `
+    <tr>
+      <td>${esc(m.name)}</td>
+      <td style="text-align:center">${m.qty}</td>
+      <td style="text-align:right">${fmtMoney(m.price)}</td>
+      <td style="text-align:right;font-weight:600">${fmtMoney(m.qty * m.price)}</td>
+    </tr>`).join('');
+  const pv = document.getElementById('printView');
+  pv.innerHTML = `
+    <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#202124">
+      <div style="text-align:center;border-bottom:3px solid #1a73e8;padding-bottom:12px;margin-bottom:20px">
+        <h1 style="color:#1a73e8;margin:0;font-size:1.4rem">KAMERA GÜVENLİK TEKLİFİ</h1>
+        <div style="font-size:.85rem;color:#5f6368;margin-top:4px">CAM-O</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:.9rem">
+        <div><strong>Müşteri:</strong> ${esc(fd.customer || '—')}</div>
+        <div><strong>Tarih:</strong> ${fd.date}</div>
+      </div>
+      ${fd.note ? `<div style="background:#f8f9fa;border-left:3px solid #1a73e8;padding:8px 12px;margin-bottom:16px;font-size:.85rem">${esc(fd.note)}</div>` : ''}
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:16px">
+        <thead>
+          <tr style="background:#1a73e8;color:#fff">
+            <th style="padding:8px;text-align:left">Ürün</th>
+            <th style="padding:8px;text-align:center;width:60px">Miktar</th>
+            <th style="padding:8px;text-align:right;width:100px">Birim Fiyat</th>
+            <th style="padding:8px;text-align:right;width:110px">Toplam</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <table style="width:240px;margin-left:auto;border-collapse:collapse;font-size:.88rem">
+        <tr><td style="padding:4px 8px">Malzeme Toplamı</td><td style="padding:4px 8px;text-align:right">${fmtMoney(fd.matTotal)}</td></tr>
+        <tr><td style="padding:4px 8px">İşçilik</td><td style="padding:4px 8px;text-align:right">${fmtMoney(fd.laborTotal)}</td></tr>
+        <tr style="border-top:2px solid #1a73e8;font-weight:700;font-size:1rem">
+          <td style="padding:8px">Teklif Fiyatı</td>
+          <td style="padding:8px;text-align:right;color:#1a73e8">${fmtMoney(fd.offer)}</td>
+        </tr>
+      </table>
+      <div class="no-print" style="margin-top:24px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button onclick="window.print()" style="padding:10px 20px;background:#ff9800;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">🖨 PDF / Yazdır</button>
+        <button onclick="shareCurrentWhatsApp()" style="padding:10px 20px;background:#25d366;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">💬 WhatsApp</button>
+        <button onclick="document.getElementById('printView').innerHTML=''" style="padding:10px 20px;background:#fff;color:#5f6368;border:1.5px solid #dadce0;border-radius:8px;font-size:.9rem;cursor:pointer">← Geri</button>
+      </div>
+    </div>`;
+  window.scrollTo(0, 0);
+  window.print();
+  setTimeout(() => { pv.innerHTML = ''; }, 1000);
 }
 
 // ============ CHANGELOG ============
