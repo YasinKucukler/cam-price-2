@@ -2160,13 +2160,10 @@ document.getElementById('matListModal').addEventListener('click', function(e) { 
 function printProject(id) {
   const p = projects.find(x => x.id === id || x.id === Number(id));
   if (!p) return;
-  const margin = p.offer > 0 ? ((p.profit / p.offer) * 100).toFixed(1) : 0;
   const rows = (p.materials || []).map(m => `
     <tr>
       <td>${esc(m.name)}</td>
       <td style="text-align:center">${m.qty}</td>
-      <td style="text-align:right">${fmtMoney(m.price)}</td>
-      <td style="text-align:right;font-weight:600">${fmtMoney(m.qty * m.price)}</td>
     </tr>`).join('');
   const pv = document.getElementById('printView');
   pv.innerHTML = `
@@ -2184,20 +2181,10 @@ function printProject(id) {
         <thead>
           <tr style="background:#1a73e8;color:#fff">
             <th style="padding:8px;text-align:left">Ürün</th>
-            <th style="padding:8px;text-align:center;width:60px">Miktar</th>
-            <th style="padding:8px;text-align:right;width:100px">Birim Fiyat</th>
-            <th style="padding:8px;text-align:right;width:110px">Toplam</th>
+            <th style="padding:8px;text-align:center;width:80px">Miktar</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
-      </table>
-      <table style="width:240px;margin-left:auto;border-collapse:collapse;font-size:.88rem">
-        <tr><td style="padding:4px 8px">Malzeme Toplamı</td><td style="padding:4px 8px;text-align:right">${fmtMoney(p.matTotal)}</td></tr>
-        <tr><td style="padding:4px 8px">İşçilik</td><td style="padding:4px 8px;text-align:right">${fmtMoney(p.laborTotal)}</td></tr>
-        <tr style="border-top:2px solid #1a73e8;font-weight:700;font-size:1rem">
-          <td style="padding:8px">Teklif Fiyatı</td>
-          <td style="padding:8px;text-align:right;color:#1a73e8">${fmtMoney(p.offer)}</td>
-        </tr>
       </table>
       <div class="no-print" style="margin-top:24px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
         <button onclick="window.print()" style="padding:10px 20px;background:#ff9800;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">🖨 PDF / Yazdır</button>
@@ -2215,7 +2202,7 @@ function printProject(id) {
 }
 
 function buildWhatsAppText(data) {
-  const { customer, date, note, materials: mats, matTotal, laborTotal, offer } = data;
+  const { customer, date, note, materials: mats } = data;
   let lines = [];
   lines.push('🎥 *KAMERA GÜVENLİK TEKLİFİ*');
   lines.push('👤 Müşteri: ' + customer);
@@ -2224,13 +2211,8 @@ function buildWhatsAppText(data) {
   lines.push('');
   lines.push('📦 *Malzeme Listesi:*');
   (mats || []).forEach(m => {
-    lines.push('• ' + m.name + ' × ' + m.qty + ' = ' + fmtMoney(m.qty * m.price));
+    lines.push('• ' + m.name + ' × ' + m.qty);
   });
-  lines.push('');
-  lines.push('💰 Malzeme: ' + fmtMoney(matTotal));
-  lines.push('👷 İşçilik: ' + fmtMoney(laborTotal));
-  lines.push('─────────────────');
-  lines.push('📋 *Teklif Fiyatı: ' + fmtMoney(offer) + '*');
   return lines.join('\n');
 }
 
@@ -2263,8 +2245,6 @@ function printCurrent() {
     <tr>
       <td>${esc(m.name)}</td>
       <td style="text-align:center">${m.qty}</td>
-      <td style="text-align:right">${fmtMoney(m.price)}</td>
-      <td style="text-align:right;font-weight:600">${fmtMoney(m.qty * m.price)}</td>
     </tr>`).join('');
   const pv = document.getElementById('printView');
   pv.innerHTML = `
@@ -2282,20 +2262,10 @@ function printCurrent() {
         <thead>
           <tr style="background:#1a73e8;color:#fff">
             <th style="padding:8px;text-align:left">Ürün</th>
-            <th style="padding:8px;text-align:center;width:60px">Miktar</th>
-            <th style="padding:8px;text-align:right;width:100px">Birim Fiyat</th>
-            <th style="padding:8px;text-align:right;width:110px">Toplam</th>
+            <th style="padding:8px;text-align:center;width:80px">Miktar</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
-      </table>
-      <table style="width:240px;margin-left:auto;border-collapse:collapse;font-size:.88rem">
-        <tr><td style="padding:4px 8px">Malzeme Toplamı</td><td style="padding:4px 8px;text-align:right">${fmtMoney(fd.matTotal)}</td></tr>
-        <tr><td style="padding:4px 8px">İşçilik</td><td style="padding:4px 8px;text-align:right">${fmtMoney(fd.laborTotal)}</td></tr>
-        <tr style="border-top:2px solid #1a73e8;font-weight:700;font-size:1rem">
-          <td style="padding:8px">Teklif Fiyatı</td>
-          <td style="padding:8px;text-align:right;color:#1a73e8">${fmtMoney(fd.offer)}</td>
-        </tr>
       </table>
       <div class="no-print" style="margin-top:24px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
         <button onclick="window.print()" style="padding:10px 20px;background:#ff9800;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">🖨 PDF / Yazdır</button>
